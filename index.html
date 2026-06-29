@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WaVe — Sistema de Recibos</title>
+<title>Jump Salary — Sistema de Recibos</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <style>
@@ -42,7 +42,7 @@ button{font-family:inherit;cursor:pointer;}
 .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--navy) 0%,var(--navy2) 50%,var(--navy3) 100%);padding:20px;}
 .login-card{background:var(--surface);border-radius:var(--radius-lg);padding:40px;width:100%;max-width:400px;box-shadow:var(--shadow-lg);}
 .login-logo{text-align:center;margin-bottom:28px;}
-.login-logo-wave{font-size:32px;font-weight:700;color:var(--navy2);letter-spacing:-1px;}
+.login-logo-wave{font-size:28px;font-weight:700;color:var(--navy2);letter-spacing:-1px;}
 .login-logo-wave span{color:var(--gold);}
 .login-logo-sub{font-size:12px;color:var(--text3);margin-top:4px;letter-spacing:.08em;text-transform:uppercase;}
 .login-title{font-size:18px;font-weight:600;color:var(--navy);margin-bottom:6px;}
@@ -68,7 +68,7 @@ button{font-family:inherit;cursor:pointer;}
 .app{display:none;min-height:100vh;flex-direction:column;}
 .app.visible{display:flex;}
 .topbar{background:var(--navy2);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:56px;flex-shrink:0;}
-.topbar-logo{font-size:18px;font-weight:700;letter-spacing:-0.5px;}
+.topbar-logo{font-size:15px;font-weight:700;letter-spacing:-0.5px;}
 .topbar-logo span{color:var(--gold);}
 .topbar-info{font-size:12px;color:rgba(255,255,255,.65);margin-left:12px;}
 .topbar-right{display:flex;align-items:center;gap:12px;}
@@ -186,7 +186,7 @@ tr:last-child td{border-bottom:none;}
 <div class="login-wrap" id="login-wrap">
   <div class="login-card">
     <div class="login-logo">
-      <div class="login-logo-wave">Wa<span>Ve</span></div>
+      <div class="login-logo-wave">Jump <span>Salary</span></div>
       <div class="login-logo-sub">Sistema de Recibos</div>
     </div>
     <div id="login-step-1">
@@ -220,7 +220,7 @@ tr:last-child td{border-bottom:none;}
 <div class="app" id="app">
   <div class="topbar">
     <div style="display:flex;align-items:center;">
-      <div class="topbar-logo">Wa<span>Ve</span></div>
+      <div class="topbar-logo">Jump <span>Salary</span></div>
       <div class="topbar-info" id="topbar-empresa"></div>
     </div>
     <div class="topbar-right">
