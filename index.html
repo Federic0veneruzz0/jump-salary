@@ -1,0 +1,1205 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WaVe — Sistema de Recibos</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+:root {
+  --navy: #0f1f3d;
+  --navy2: #1a2e5a;
+  --navy3: #243d73;
+  --accent: #3b6fd4;
+  --accent2: #5b8de8;
+  --gold: #e8b84b;
+  --gold2: #f5d07a;
+  --bg: #f4f6fb;
+  --bg2: #e8edf5;
+  --surface: #ffffff;
+  --border: #d0d8ec;
+  --text: #0f1f3d;
+  --text2: #4a5a7a;
+  --text3: #8a9ab8;
+  --danger: #e53e3e;
+  --danger-bg: #fff5f5;
+  --success: #2d7d4f;
+  --success-bg: #f0fff4;
+  --warning: #b7791f;
+  --warning-bg: #fffbeb;
+  --radius: 8px;
+  --radius-lg: 14px;
+  --shadow: 0 2px 12px rgba(15,31,61,0.08);
+  --shadow-lg: 0 8px 32px rgba(15,31,61,0.14);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:14px;min-height:100vh;}
+input,select,textarea{font-family:inherit;font-size:14px;}
+button{font-family:inherit;cursor:pointer;}
+
+/* LOGIN */
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--navy) 0%,var(--navy2) 50%,var(--navy3) 100%);padding:20px;}
+.login-card{background:var(--surface);border-radius:var(--radius-lg);padding:40px;width:100%;max-width:400px;box-shadow:var(--shadow-lg);}
+.login-logo{text-align:center;margin-bottom:28px;}
+.login-logo-wave{font-size:32px;font-weight:700;color:var(--navy2);letter-spacing:-1px;}
+.login-logo-wave span{color:var(--gold);}
+.login-logo-sub{font-size:12px;color:var(--text3);margin-top:4px;letter-spacing:.08em;text-transform:uppercase;}
+.login-title{font-size:18px;font-weight:600;color:var(--navy);margin-bottom:6px;}
+.login-sub{font-size:13px;color:var(--text2);margin-bottom:24px;}
+.field{margin-bottom:16px;}
+.field label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em;}
+.field input{width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:14px;color:var(--text);transition:border .15s;background:var(--surface);}
+.field input:focus{outline:none;border-color:var(--accent);}
+.btn{width:100%;padding:11px;border-radius:var(--radius);border:none;font-size:14px;font-weight:600;cursor:pointer;transition:all .15s;}
+.btn-primary{background:var(--navy2);color:#fff;}
+.btn-primary:hover{background:var(--navy3);}
+.btn-gold{background:var(--gold);color:var(--navy);}
+.btn-gold:hover{background:var(--gold2);}
+.btn-sm{padding:7px 14px;font-size:13px;font-weight:500;border-radius:var(--radius);border:none;}
+.btn-outline{background:none;border:1.5px solid var(--border);color:var(--text2);}
+.btn-outline:hover{border-color:var(--accent);color:var(--accent);}
+.btn-danger{background:var(--danger);color:#fff;}
+.btn-success{background:var(--success);color:#fff;}
+.err{background:var(--danger-bg);color:var(--danger);border:1px solid #fed7d7;border-radius:var(--radius);padding:10px 14px;font-size:13px;margin-bottom:16px;}
+.ok{background:var(--success-bg);color:var(--success);border:1px solid #c6f6d5;border-radius:var(--radius);padding:10px 14px;font-size:13px;margin-bottom:16px;}
+
+/* APP SHELL */
+.app{display:none;min-height:100vh;flex-direction:column;}
+.app.visible{display:flex;}
+.topbar{background:var(--navy2);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:56px;flex-shrink:0;}
+.topbar-logo{font-size:18px;font-weight:700;letter-spacing:-0.5px;}
+.topbar-logo span{color:var(--gold);}
+.topbar-info{font-size:12px;color:rgba(255,255,255,.65);margin-left:12px;}
+.topbar-right{display:flex;align-items:center;gap:12px;}
+.topbar-user{font-size:13px;color:rgba(255,255,255,.8);}
+.topbar-rol{font-size:11px;background:rgba(255,255,255,.15);padding:2px 8px;border-radius:20px;color:#fff;margin-left:6px;}
+.btn-logout{background:none;border:1px solid rgba(255,255,255,.3);color:#fff;padding:5px 12px;border-radius:var(--radius);font-size:12px;}
+.btn-logout:hover{background:rgba(255,255,255,.1);}
+
+.main{display:flex;flex:1;overflow:hidden;}
+.sidebar{width:220px;background:var(--surface);border-right:1px solid var(--border);flex-shrink:0;padding:16px 0;overflow-y:auto;}
+.sidebar-section{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;padding:8px 20px 4px;}
+.sidebar-item{display:flex;align-items:center;gap:10px;padding:9px 20px;font-size:13px;color:var(--text2);cursor:pointer;transition:all .12s;border-left:3px solid transparent;}
+.sidebar-item:hover{background:var(--bg);color:var(--navy2);}
+.sidebar-item.active{background:var(--bg2);color:var(--navy2);font-weight:600;border-left-color:var(--accent);}
+.sidebar-item svg{width:16px;height:16px;flex-shrink:0;}
+
+.content{flex:1;overflow-y:auto;padding:28px;}
+.page{display:none;}
+.page.active{display:block;}
+
+/* COMPONENTES */
+.page-title{font-size:20px;font-weight:700;color:var(--navy);margin-bottom:4px;}
+.page-sub{font-size:13px;color:var(--text2);margin-bottom:24px;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;margin-bottom:16px;box-shadow:var(--shadow);}
+.card-title{font-size:14px;font-weight:600;color:var(--navy);margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border);}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px;box-shadow:var(--shadow);}
+.stat-val{font-size:26px;font-weight:700;color:var(--navy2);}
+.stat-lbl{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-top:3px;}
+.stat.accent{border-top:3px solid var(--accent);}
+.stat.gold{border-top:3px solid var(--gold);}
+.stat.success{border-top:3px solid var(--success);}
+.stat.danger{border-top:3px solid var(--danger);}
+
+table{width:100%;border-collapse:collapse;}
+th{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;padding:8px 12px;text-align:left;border-bottom:2px solid var(--border);}
+td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px;color:var(--text);}
+tr:hover td{background:var(--bg);}
+tr:last-child td{border-bottom:none;}
+
+.badge{display:inline-block;font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;}
+.badge-borrador{background:#edf2f7;color:#4a5568;}
+.badge-publicado{background:#ebf8ff;color:#2b6cb0;}
+.badge-revocado{background:var(--danger-bg);color:var(--danger);}
+.badge-firmado{background:var(--success-bg);color:var(--success);}
+.badge-pendiente{background:var(--warning-bg);color:var(--warning);}
+
+.semaforo{display:flex;align-items:center;gap:6px;font-size:12px;}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.dot-green{background:var(--success);}
+.dot-yellow{background:var(--gold);}
+.dot-red{background:var(--danger);}
+.dot-gray{background:var(--text3);}
+
+.upload-zone{border:2px dashed var(--border);border-radius:var(--radius-lg);padding:32px;text-align:center;cursor:pointer;transition:all .15s;margin-bottom:16px;}
+.upload-zone:hover{border-color:var(--accent);background:var(--bg2);}
+.upload-zone.loaded{border-color:var(--success);background:var(--success-bg);}
+.upload-icon{font-size:36px;margin-bottom:8px;}
+.upload-title{font-size:15px;font-weight:600;color:var(--navy);margin-bottom:4px;}
+.upload-sub{font-size:12px;color:var(--text3);}
+
+.recibo-preview{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:16px;}
+.rp-head{background:var(--navy2);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;}
+.rp-head-title{font-size:13px;font-weight:600;}
+.rp-head-badge{font-size:11px;background:rgba(255,255,255,.2);padding:2px 8px;border-radius:20px;}
+.rp-body{padding:16px;}
+.rp-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;}
+.rp-field{font-size:12px;}
+.rp-field-lbl{color:var(--text3);margin-bottom:2px;}
+.rp-field-val{font-weight:600;color:var(--navy);}
+.rp-table{width:100%;border-collapse:collapse;font-size:12px;}
+.rp-table th{font-size:10px;color:var(--text3);padding:4px 8px;border-bottom:1px solid var(--border);text-align:right;}
+.rp-table th:first-child{text-align:left;}
+.rp-table td{padding:5px 8px;border-bottom:1px solid var(--border);text-align:right;}
+.rp-table td:first-child{text-align:left;}
+.rp-neto{background:var(--navy2);color:#fff;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;font-weight:700;}
+
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(15,31,61,.5);z-index:100;align-items:center;justify-content:center;}
+.modal-overlay.visible{display:flex;}
+.modal{background:var(--surface);border-radius:var(--radius-lg);padding:28px;width:100%;max-width:480px;box-shadow:var(--shadow-lg);}
+.modal-title{font-size:16px;font-weight:700;color:var(--navy);margin-bottom:6px;}
+.modal-sub{font-size:13px;color:var(--text2);margin-bottom:20px;}
+.modal-actions{display:flex;gap:10px;margin-top:20px;}
+
+.firma-card{background:linear-gradient(135deg,var(--navy) 0%,var(--navy2) 100%);color:#fff;border-radius:var(--radius-lg);padding:24px;text-align:center;margin-bottom:20px;}
+.firma-icon{font-size:48px;margin-bottom:12px;}
+.firma-title{font-size:18px;font-weight:700;margin-bottom:6px;}
+.firma-sub{font-size:13px;color:rgba(255,255,255,.7);margin-bottom:20px;}
+.constancia-box{background:var(--success-bg);border:1px solid #c6f6d5;border-radius:var(--radius-lg);padding:20px;text-align:center;}
+.constancia-icon{font-size:40px;margin-bottom:8px;}
+.constancia-title{font-size:16px;font-weight:700;color:var(--success);margin-bottom:8px;}
+.constancia-detail{font-size:12px;color:var(--text2);line-height:1.6;}
+
+.tabs{display:flex;gap:4px;background:var(--bg2);border-radius:var(--radius);padding:4px;margin-bottom:20px;width:fit-content;}
+.tab-btn{padding:7px 16px;border-radius:6px;border:none;background:none;font-size:13px;color:var(--text2);cursor:pointer;transition:all .12s;}
+.tab-btn.active{background:var(--surface);color:var(--navy2);font-weight:600;box-shadow:0 1px 4px rgba(0,0,0,.08);}
+
+.empty{text-align:center;padding:48px 20px;color:var(--text3);}
+.empty-icon{font-size:48px;margin-bottom:12px;}
+.empty-title{font-size:16px;font-weight:600;color:var(--text2);margin-bottom:6px;}
+.empty-sub{font-size:13px;}
+
+.loading{text-align:center;padding:40px;color:var(--text3);font-size:13px;}
+
+@media(max-width:640px){
+  .sidebar{display:none;}
+  .content{padding:16px;}
+  .stats{grid-template-columns:1fr 1fr;}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="login-wrap" id="login-wrap">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-wave">Wa<span>Ve</span></div>
+      <div class="login-logo-sub">Sistema de Recibos</div>
+    </div>
+    <div id="login-step-1">
+      <div class="login-title">Bienvenido</div>
+      <div class="login-sub">Ingresá con tu CUIT o CUIL para continuar.</div>
+      <div id="login-err" class="err" style="display:none;"></div>
+      <div class="field"><label>CUIT / CUIL</label><input type="text" id="login-cuit" placeholder="20-12345678-9" maxlength="13"></div>
+      <div class="field">
+        <label>Contraseña</label>
+        <div style="position:relative;">
+          <input type="password" id="login-pass" placeholder="••••••••" style="width:100%;padding-right:44px;" onkeydown="if(event.key==='Enter')doLogin()">
+          <button type="button" onclick="togglePass('login-pass',this)" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3);">👁</button>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="doLogin()">Ingresar</button>
+      <div style="margin-top:12px;text-align:center;font-size:12px;color:var(--text3);">¿Primera vez? Ingresá tu CUIL y DNI como contraseña.</div>
+    </div>
+    <div id="login-step-primer" style="display:none;">
+      <div class="login-title">Creá tu contraseña</div>
+      <div class="login-sub">Es tu primer acceso. Elegí una contraseña segura y dejá tu email para recibir notificaciones.</div>
+      <div id="primer-err" class="err" style="display:none;"></div>
+      <div class="field"><label>Nueva contraseña</label><input type="password" id="new-pass" placeholder="Mínimo 8 caracteres"></div>
+      <div class="field"><label>Confirmá la contraseña</label><input type="password" id="new-pass2" placeholder="Repetí la contraseña"></div>
+      <div class="field"><label>Tu email</label><input type="email" id="new-email" placeholder="ejemplo@gmail.com"></div>
+      <button class="btn btn-gold" onclick="doPrimerAcceso()">Confirmar y continuar</button>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div class="app" id="app">
+  <div class="topbar">
+    <div style="display:flex;align-items:center;">
+      <div class="topbar-logo">Wa<span>Ve</span></div>
+      <div class="topbar-info" id="topbar-empresa"></div>
+    </div>
+    <div class="topbar-right">
+      <div>
+        <span class="topbar-user" id="topbar-user"></span>
+        <span class="topbar-rol" id="topbar-rol"></span>
+      </div>
+      <button class="btn-logout" onclick="doLogout()">Salir</button>
+    </div>
+  </div>
+  <div class="main">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="content">
+
+      <!-- PANEL CONTADOR -->
+      <div class="page" id="page-dashboard">
+        <div class="page-title">Panel general</div>
+        <div class="page-sub">Resumen de todos los clientes</div>
+        <div class="stats">
+          <div class="stat accent"><div class="stat-val" id="st-empresas">—</div><div class="stat-lbl">Empresas activas</div></div>
+          <div class="stat gold"><div class="stat-val" id="st-empleados">—</div><div class="stat-lbl">Empleados</div></div>
+          <div class="stat success"><div class="stat-val" id="st-firmados">—</div><div class="stat-lbl">Recibos firmados</div></div>
+          <div class="stat danger"><div class="stat-val" id="st-pendientes">—</div><div class="stat-lbl">Pendientes de firma</div></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Empresas clientes</div>
+          <div id="tabla-empresas"><div class="loading">Cargando...</div></div>
+        </div>
+      </div>
+
+      <div class="page" id="page-subir">
+        <div class="page-title">Subir liquidación</div>
+        <div class="page-sub">Seleccioná la empresa y subí el archivo .xls del SOS BETA</div>
+        <div class="card">
+          <div class="card-title">Empresa</div>
+          <div class="field"><label>Cliente</label><select id="select-empresa" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius);"><option value="">Seleccioná una empresa...</option></select></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Archivos</div>
+          <div class="upload-zone" id="dz-xls-main" onclick="document.getElementById('fi-xls-main').click()">
+            <div class="upload-icon">📊</div>
+            <div class="upload-title">Listado de recibos .xls</div>
+            <div class="upload-sub">Arrastrá o hacé clic</div>
+            <input type="file" id="fi-xls-main" accept=".xls,.html,.htm" style="display:none">
+          </div>
+          <div class="upload-zone" id="dz-conc-main" onclick="document.getElementById('fi-conc-main').click()">
+            <div class="upload-icon">📋</div>
+            <div class="upload-title">Conceptos .txt (opcional)</div>
+            <div class="upload-sub">Solo si cambiaron los conceptos del convenio</div>
+            <input type="file" id="fi-conc-main" accept=".txt" style="display:none">
+          </div>
+          <button class="btn btn-primary" onclick="procesarXLS()" style="width:auto;padding:10px 24px;">Procesar y guardar como borrador</button>
+        </div>
+        <div id="preview-subir"></div>
+      </div>
+
+      <div class="page" id="page-empleados">
+        <div class="page-title">Empleados</div>
+        <div class="page-sub">Alta masiva desde archivo ARCA o gestión individual</div>
+        <div class="card">
+          <div class="card-title">Importar desde ARCA</div>
+          <div class="field"><label>Empresa</label><select id="select-empresa-empl" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius);"><option value="">Seleccioná una empresa...</option></select></div>
+          <div class="upload-zone" id="dz-arca" onclick="document.getElementById('fi-arca').click()">
+            <div class="upload-icon">🏛️</div>
+            <div class="upload-title">ConsRelLab.txt de ARCA</div>
+            <div class="upload-sub">Arrastrá o hacé clic</div>
+            <input type="file" id="fi-arca" accept=".txt" style="display:none">
+          </div>
+          <button class="btn btn-primary" onclick="importarARCA()" style="width:auto;padding:10px 24px;">Importar empleados</button>
+        </div>
+        <div class="card">
+          <div class="card-title">Nómina</div>
+          <div id="tabla-empleados"><div class="loading">Seleccioná una empresa para ver sus empleados.</div></div>
+        </div>
+      </div>
+
+      <div class="page" id="page-recibos-contador">
+        <div class="page-title">Recibos</div>
+        <div class="page-sub">Revisá y gestioná los recibos de todos los clientes</div>
+        <div class="card" style="padding:16px;">
+          <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <select id="filtro-empresa-rec" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" onchange="cargarRecibosContador()"><option value="">Todas las empresas</option></select>
+            <select id="filtro-estado-rec" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" onchange="cargarRecibosContador()">
+              <option value="">Todos los estados</option>
+              <option value="borrador">Borrador</option>
+              <option value="publicado">Publicado</option>
+              <option value="revocado">Revocado</option>
+            </select>
+          </div>
+        </div>
+        <div id="tabla-recibos-contador"><div class="loading">Cargando...</div></div>
+      </div>
+
+      <!-- PANEL EMPLEADOR -->
+      <div class="page" id="page-empleador-dashboard">
+        <div class="page-title">Panel de empresa</div>
+        <div class="page-sub" id="empleador-empresa-sub"></div>
+        <div class="stats">
+          <div class="stat accent"><div class="stat-val" id="emp-st-total">—</div><div class="stat-lbl">Recibos este mes</div></div>
+          <div class="stat gold"><div class="stat-val" id="emp-st-pendientes">—</div><div class="stat-lbl">Para aprobar</div></div>
+          <div class="stat success"><div class="stat-val" id="emp-st-firmados">—</div><div class="stat-lbl">Firmados por empleados</div></div>
+          <div class="stat danger"><div class="stat-val" id="emp-st-sinfirma">—</div><div class="stat-lbl">Sin firmar</div></div>
+        </div>
+        <div id="tabla-recibos-empleador"><div class="loading">Cargando...</div></div>
+      </div>
+
+      <!-- PANEL CONTRIBUCIONES -->
+      <div class="page" id="page-contribuciones">
+        <div class="page-title">Contribuciones patronales</div>
+        <div class="page-sub">Configurá las tasas de cada empresa cliente</div>
+        <div class="card">
+          <div class="card-title">Empresa</div>
+          <div class="field"><select id="select-empresa-contrib" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius);" onchange="cargarContribuciones()"><option value="">Seleccioná una empresa...</option></select></div>
+        </div>
+        <div id="form-contribuciones" class="hidden">
+          <div class="card">
+            <div class="card-title">Tasas nacionales fijas</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="field"><label>SIPA / Jubilación (%)</label><input type="number" id="c-sipa" step="0.01" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius);"></div>
+              <div class="field"><label>INSSJP / PAMI (%)</label><input type="number" id="c-pami" step="0.01" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius);"></div>
+              <div class="field"><label>Fondo Nacional de Empleo (%)</label><input type="number" id="c-fne" step="0.01" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius);"></div>
+              <div class="field"><label>AAFF / Asignaciones Familiares (%)</label><input type="number" id="c-aaff" step="0.01" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius);"></div>
+              <div class="field"><label>Obra Social (%)</label><input type="number" id="c-os" step="0.01" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius);"></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">Variables por empresa</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+              <div class="field"><label>LRT (alícuota %)</label><input type="number" id="c-lrt" step="0.001" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius);"></div>
+              <div class="field"><label>Seguro de Vida Colectivo ($)</label><input type="number" id="c-svc" step="0.01" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius);"></div>
+              <div class="field"><label>FFEP ($)</label><input type="number" id="c-ffep" step="0.01" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius);"></div>
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="guardarContribuciones()" style="width:auto;padding:10px 28px;">Guardar configuración</button>
+          <div id="contrib-msg" style="margin-top:12px;display:none;"></div>
+        </div>
+      </div>
+
+      <!-- PANEL EMPLEADO -->
+      <div class="page" id="page-empleado-recibos">
+        <div class="page-title">Mis recibos</div>
+        <div class="page-sub">Solo vos podés ver y confirmar tus recibos</div>
+        <div id="lista-recibos-empleado"><div class="loading">Cargando...</div></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+
+<!-- MODAL VER RECIBO -->
+<div class="modal-overlay" id="modal-ver-recibo" style="align-items:flex-start;padding:20px;overflow-y:auto;">
+  <div class="modal" style="max-width:680px;width:100%;margin:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <div class="modal-title" id="modal-recibo-title">Recibo de haberes</div>
+      <button class="btn-sm btn-outline" onclick="cerrarModal('modal-ver-recibo')">✕ Cerrar</button>
+    </div>
+    <div id="modal-recibo-body"></div>
+    <div class="modal-actions" id="modal-recibo-actions" style="margin-top:16px;"></div>
+  </div>
+</div>
+
+<!-- MODAL REVOCAR -->
+<div class="modal-overlay" id="modal-revocar">
+  <div class="modal">
+    <div class="modal-title">Revocar recibo</div>
+    <div class="modal-sub">El empleador será notificado del motivo. Esta acción no se puede deshacer.</div>
+    <div class="field"><label>Motivo de revocación</label><textarea id="motivo-revocacion" rows="3" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:14px;" placeholder="Ej: Error en el cálculo del SAC..."></textarea></div>
+    <div class="modal-actions">
+      <button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-revocar')">Cancelar</button>
+      <button class="btn-sm btn-danger" style="flex:1;" onclick="confirmarRevocacion()">Revocar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL FIRMAR -->
+<div class="modal-overlay" id="modal-firmar">
+  <div class="modal">
+    <div class="firma-card">
+      <div class="firma-icon">✍️</div>
+      <div class="firma-title">Confirmar recepción</div>
+      <div class="firma-sub">Al confirmar, quedará registrado que recibiste este recibo con fecha y hora.</div>
+      <button class="btn btn-gold" onclick="confirmarFirma()" style="width:auto;padding:10px 28px;">Confirmar y descargar PDF</button>
+    </div>
+    <div style="text-align:center;margin-top:12px;">
+      <button class="btn-sm btn-outline" onclick="cerrarModal('modal-firmar')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── CONFIG SUPABASE ───
+const SUPABASE_URL = 'https://meowljfofnfdfnumlaog.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_e7E8ZuQS39yXvVd2m9D8ZQ_fNYI-JDD';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ─── ESTADO GLOBAL ───
+let currentUser = null;
+let currentEmpresa = null;
+let reciboActivo = null;
+let xlsData = null;
+let arcaData = null;
+let conceptosMap = {};
+
+const CONCEPTOS_DEFAULT = {
+  '1':{nombre:'Sueldo Basico',tipo:'rem'},'7':{nombre:'Presentismo',tipo:'rem'},
+  '41':{nombre:'Sueldo Anual Complementario',tipo:'rem'},'201':{nombre:'Jubilacion',tipo:'ded'},
+  '202':{nombre:'Ley 19032',tipo:'ded'},'206':{nombre:'Aporte Solidario Comercio',tipo:'ded'},
+  '209':{nombre:'FAECyS',tipo:'ded'},'221':{nombre:'OS Comercio',tipo:'ded'},
+  '415':{nombre:'No Remunerativo 12/2025',tipo:'norem'},'416':{nombre:'No Remunerativo 04/2026',tipo:'norem'},
+  '417':{nombre:'Presentismo S/ No Rem 06/2025',tipo:'norem'},'418':{nombre:'Presentismo S/ No Rem 12/2025',tipo:'norem'},
+};
+conceptosMap = {...CONCEPTOS_DEFAULT};
+
+// ─── HELPERS ───
+function nc(s){return(s||'').replace(/\D/g,'');}
+function fc(s){s=nc(s);if(s.length<11)return s;return s.slice(0,2)+'-'+s.slice(2,10)+'-'+s.slice(10);}
+function mon(v){return '$\u00a0'+Number(v).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function pc(s){return parseFloat((s||'0').replace(/\./g,'').replace(',','.'))||0;}
+function parseMes(s){const m=['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];const x=s.match(/(\d{4})-(\d{2})/);return x?m[parseInt(x[2])]+' '+x[1]:s;}
+function showErr(id,msg){const el=document.getElementById(id);if(el){el.textContent=msg;el.style.display='block';}}
+function hideErr(id){const el=document.getElementById(id);if(el)el.style.display='none';}
+function cerrarModal(id){document.getElementById(id).classList.remove('visible');}
+function abrirModal(id){document.getElementById(id).classList.add('visible');}
+
+// ─── LOGIN ───
+async function doLogin(){
+  hideErr('login-err');
+  const cuit=nc(document.getElementById('login-cuit').value);
+  const pass=document.getElementById('login-pass').value;
+  if(!cuit||!pass){showErr('login-err','Completá todos los campos.');return;}
+
+  // Buscar usuario en nuestra tabla
+  const{data:usuario,error}=await sb.from('usuarios').select('*').eq('cuit_cuil',cuit).single();
+  if(error||!usuario){showErr('login-err','CUIT/CUIL no encontrado en el sistema.');return;}
+
+  // Si es primer acceso, la clave es el DNI (8 dígitos del medio del CUIL)
+  const dniEsperado=cuit.slice(2,10);
+  if(usuario.primer_acceso){
+    if(pass!==dniEsperado){showErr('login-err','Contraseña incorrecta. En tu primer acceso usá tu DNI como contraseña.');return;}
+    currentUser=usuario;
+    document.getElementById('login-step-1').style.display='none';
+    document.getElementById('login-step-primer').style.display='block';
+    return;
+  }
+
+  // Login normal con Supabase Auth
+  if(!usuario.email){showErr('login-err','No hay email registrado para este usuario. Contactá al administrador.');return;}
+  const{error:authErr}=await sb.auth.signInWithPassword({email:usuario.email,password:pass});
+  if(authErr){
+    // Intentar con email alternativo basado en CUIT
+    showErr('login-err','Contraseña incorrecta. Si es tu primer acceso verificá el email que te enviaron.');
+    return;
+  }
+  currentUser=usuario;
+  iniciarApp();
+}
+
+function togglePass(inputId, btn){
+  const inp = document.getElementById(inputId);
+  if(inp.type === 'password'){inp.type='text';btn.textContent='🙈';}
+  else{inp.type='password';btn.textContent='👁';}
+}
+
+async function doPrimerAcceso(){
+  hideErr('primer-err');
+  const pass=document.getElementById('new-pass').value;
+  const pass2=document.getElementById('new-pass2').value;
+  const email=document.getElementById('new-email').value;
+  if(pass.length<8){showErr('primer-err','La contraseña debe tener al menos 8 caracteres.');return;}
+  if(pass!==pass2){showErr('primer-err','Las contraseñas no coinciden.');return;}
+  if(!email.includes('@')){showErr('primer-err','Email inválido.');return;}
+
+  // Crear usuario en Supabase Auth
+  const{data,error}=await sb.auth.signUp({email,password:pass});
+  if(error){showErr('primer-err','Error al crear cuenta: '+error.message);return;}
+
+  // Actualizar en nuestra tabla
+  await sb.from('usuarios').update({email,primer_acceso:false,auth_id:data.user?.id}).eq('id',currentUser.id);
+  currentUser={...currentUser,email,primer_acceso:false};
+
+  // Notificar que se enviará email de verificación
+  alert('¡Cuenta creada! Te enviamos un email de verificación a '+email+'. Verificá tu casilla y volvé a ingresar.');
+  location.reload();
+}
+
+async function cargarContribuciones(){
+  const empId=document.getElementById('select-empresa-contrib').value;
+  if(!empId){document.getElementById('form-contribuciones').classList.add('hidden');return;}
+  const{data:cfg}=await sb.from('contribuciones_empresa').select('*').eq('empresa_id',empId).single();
+  const form=document.getElementById('form-contribuciones');
+  form.classList.remove('hidden');
+  if(cfg){
+    document.getElementById('c-sipa').value=cfg.SIPA||16;
+    document.getElementById('c-pami').value=cfg.PAMI||2;
+    document.getElementById('c-fne').value=cfg.FNE||1.5;
+    document.getElementById('c-aaff').value=cfg.AAFF||4.4;
+    document.getElementById('c-os').value=cfg['Obra Social']||6;
+    document.getElementById('c-lrt').value=cfg.LRT||0;
+    document.getElementById('c-svc').value=cfg.SVC||0;
+    document.getElementById('c-ffep').value=cfg.FFEP||0;
+  }
+}
+
+async function guardarContribuciones(){
+  const empId=document.getElementById('select-empresa-contrib').value;
+  if(!empId)return;
+  const payload={
+    empresa_id:empId,
+    SIPA:parseFloat(document.getElementById('c-sipa').value)||16,
+    PAMI:parseFloat(document.getElementById('c-pami').value)||2,
+    FNE:parseFloat(document.getElementById('c-fne').value)||1.5,
+    AAFF:parseFloat(document.getElementById('c-aaff').value)||4.4,
+    'Obra Social':parseFloat(document.getElementById('c-os').value)||6,
+    LRT:parseFloat(document.getElementById('c-lrt').value)||0,
+    SVC:parseFloat(document.getElementById('c-svc').value)||0,
+    FFEP:parseFloat(document.getElementById('c-ffep').value)||0,
+  };
+  const{data:exists}=await sb.from('contribuciones_empresa').select('id').eq('empresa_id',empId).single();
+  if(exists){
+    await sb.from('contribuciones_empresa').update(payload).eq('empresa_id',empId);
+  } else {
+    await sb.from('contribuciones_empresa').insert(payload);
+  }
+  const msg=document.getElementById('contrib-msg');
+  msg.style.display='block';
+  msg.innerHTML='<div class="ok">✅ Configuración guardada correctamente.</div>';
+  setTimeout(()=>msg.style.display='none',3000);
+}
+
+async function doLogout(){
+  await sb.auth.signOut();
+  currentUser=null;
+  document.getElementById('app').classList.remove('visible');
+  document.getElementById('login-wrap').style.display='flex';
+  document.getElementById('login-step-1').style.display='block';
+  document.getElementById('login-step-primer').style.display='none';
+}
+
+// ─── INICIAR APP ───
+async function iniciarApp(){
+  document.getElementById('login-wrap').style.display='none';
+  document.getElementById('app').classList.add('visible');
+  document.getElementById('topbar-user').textContent=currentUser.nombre;
+
+  // Verificar si tiene doble rol (empleador + empleado en misma empresa)
+  // El empleado_id ya viene seteado en el UPDATE que hicimos en Supabase
+  if(currentUser.tipo==='empleador' && currentUser.empleado_id){
+    currentUser.dobleRol=true;
+  }
+
+  const roles={contador:'Contador',empleador:'Empleador',empleado:'Empleado'};
+  const rolLabel=currentUser.dobleRol?'Empleador + Empleado':roles[currentUser.tipo]||currentUser.tipo;
+  document.getElementById('topbar-rol').textContent=rolLabel;
+
+  if(currentUser.tipo==='contador') await initContador();
+  else if(currentUser.tipo==='empleador') await initEmpleador();
+  else await initEmpleado();
+}
+
+// ─── SIDEBAR ───
+function buildSidebar(items){
+  const sb=document.getElementById('sidebar');
+  sb.innerHTML='';
+  items.forEach(item=>{
+    if(item.section){
+      const sec=document.createElement('div');
+      sec.className='sidebar-section';
+      sec.textContent=item.section;
+      sb.appendChild(sec);
+      return;
+    }
+    const div=document.createElement('div');
+    div.className='sidebar-item'+(item.active?' active':'');
+    div.innerHTML=`<span>${item.icon}</span><span>${item.label}</span>`;
+    div.addEventListener('click',function(){navTo(item.page,this);});
+    sb.appendChild(div);
+  });
+}
+
+function navTo(pageId,clickedEl){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  const page=document.getElementById(pageId);
+  if(page) page.classList.add('active');
+  document.querySelectorAll('.sidebar-item').forEach(i=>i.classList.remove('active'));
+  if(clickedEl) clickedEl.classList.add('active');
+  // Cargar datos según la página
+  if(pageId==='page-recibos-contador') cargarRecibosContador();
+  if(pageId==='page-dashboard') cargarDashboardContador();
+}
+
+// ─── CONTADOR ───
+async function initContador(){
+  buildSidebar([
+    {section:'General'},
+    {icon:'🏠',label:'Panel',page:'page-dashboard',active:true},
+    {icon:'📤',label:'Subir liquidación',page:'page-subir'},
+    {section:'Gestión'},
+    {icon:'👥',label:'Empleados',page:'page-empleados'},
+    {icon:'📄',label:'Recibos',page:'page-recibos-contador'},
+    {icon:'⚙️',label:'Contribuciones',page:'page-contribuciones'},
+  ]);
+  document.getElementById('page-dashboard').classList.add('active');
+  await cargarDashboardContador();
+  await cargarSelectEmpresas();
+  setupUploads();
+}
+
+async function cargarDashboardContador(){
+  const{data:empresas}=await sb.from('empresas').select('id,nombre,cuit').eq('activa',true);
+  const{data:empleados}=await sb.from('empleados').select('id').eq('activo',true);
+  const{data:firmados}=await sb.from('constancias').select('id');
+  const{data:publicados}=await sb.from('recibos').select('id').eq('estado','publicado');
+
+  document.getElementById('st-empresas').textContent=empresas?.length||0;
+  document.getElementById('st-empleados').textContent=empleados?.length||0;
+  document.getElementById('st-firmados').textContent=firmados?.length||0;
+  document.getElementById('st-pendientes').textContent=publicados?.length||0;
+
+  if(!empresas?.length){
+    document.getElementById('tabla-empresas').innerHTML=`<div class="empty"><div class="empty-icon">🏢</div><div class="empty-title">Sin empresas todavía</div><div class="empty-sub">Agregá clientes desde la sección Empleados.</div></div>`;
+    return;
+  }
+  let html=`<table><thead><tr><th>Empresa</th><th>CUIT</th><th>Empleados</th><th></th></tr></thead><tbody>`;
+  for(const e of empresas){
+    const{count}=await sb.from('empleados').select('id',{count:'exact'}).eq('empresa_id',e.id).eq('activo',true);
+    html+=`<tr><td><strong>${e.nombre}</strong></td><td>${fc(e.cuit)}</td><td>${count||0}</td><td><button class="btn-sm btn-outline" onclick="verEmpresa('${e.id}')">Ver recibos</button></td></tr>`;
+  }
+  html+=`</tbody></table>`;
+  document.getElementById('tabla-empresas').innerHTML=html;
+}
+
+async function cargarSelectEmpresas(){
+  const{data:empresas}=await sb.from('empresas').select('id,nombre').eq('activa',true);
+  ['select-empresa','select-empresa-empl','filtro-empresa-rec','select-empresa-contrib'].forEach(id=>{
+    const sel=document.getElementById(id);
+    if(!sel)return;
+    const first=sel.options[0].outerHTML;
+    sel.innerHTML=first;
+    empresas?.forEach(e=>{sel.innerHTML+=`<option value="${e.id}">${e.nombre}</option>`;});
+  });
+}
+
+async function cargarRecibosContador(){
+  const empId=document.getElementById('filtro-empresa-rec')?.value;
+  const estado=document.getElementById('filtro-estado-rec')?.value;
+  let q=sb.from('recibos').select('*,empleados(nombre,cuil),empresas(nombre)').order('created_at',{ascending:false}).limit(100);
+  if(empId)q=q.eq('empresa_id',empId);
+  if(estado)q=q.eq('estado',estado);
+  const{data:recibos}=await q;
+  if(!recibos?.length){document.getElementById('tabla-recibos-contador').innerHTML=`<div class="empty"><div class="empty-icon">📄</div><div class="empty-title">Sin recibos</div></div>`;return;}
+  let html=`<div class="card"><table><thead><tr><th>Empleado</th><th>Empresa</th><th>Período</th><th>Tipo</th><th>Neto</th><th>Estado</th><th></th></tr></thead><tbody>`;
+  recibos.forEach(r=>{
+    const badgeClass={borrador:'badge-borrador',publicado:'badge-publicado',revocado:'badge-revocado'}[r.estado]||'badge-borrador';
+    html+=`<tr>
+      <td><strong>${r.empleados?.nombre||'—'}</strong><br><small style="color:var(--text3)">${fc(r.empleados?.cuil||'')}</small></td>
+      <td>${r.empresas?.nombre||'—'}</td>
+      <td>${parseMes(r.periodo)}</td>
+      <td>${r.tipo}</td>
+      <td>${mon(r.neto_redondeado||r.neto)}</td>
+      <td><span class="badge ${badgeClass}">${r.estado}</span></td>
+      <td style="white-space:nowrap;">
+        <button class="btn-sm btn-outline" style="margin-right:5px;" onclick="verRecibo('${r.id}')">Ver</button>
+        ${r.estado==='publicado'?`<button class="btn-sm btn-danger" onclick="iniciarRevocacion('${r.id}')">Revocar</button>`:''}
+      </td>
+    </tr>`;
+  });
+  html+=`</tbody></table></div>`;
+  document.getElementById('tabla-recibos-contador').innerHTML=html;
+}
+
+// ─── IMPORTAR ARCA ───
+async function importarARCA(){
+  const empId=document.getElementById('select-empresa-empl').value;
+  if(!empId){alert('Seleccioná una empresa primero.');return;}
+  if(!arcaData){alert('Subí el archivo ConsRelLab.txt primero.');return;}
+
+  let creados=0,actualizados=0;
+  for(const emp of arcaData){
+    const{data:exists}=await sb.from('empleados').select('id').eq('empresa_id',empId).eq('cuil',emp.cuil).single();
+    if(exists){
+      await sb.from('empleados').update({nombre:emp.nombre,obra_social:emp.obra_social,modalidad:emp.modalidad,puesto:emp.puesto,categoria:emp.categoria,fecha_ingreso:emp.fecha_ingreso||null}).eq('id',exists.id);
+      actualizados++;
+    } else {
+      await sb.from('empleados').insert({empresa_id:empId,cuil:emp.cuil,dni:emp.dni,nombre:emp.nombre,obra_social:emp.obra_social,modalidad:emp.modalidad,puesto:emp.puesto,categoria:emp.categoria,fecha_ingreso:emp.fecha_ingreso||null});
+      // Crear usuario empleado
+      await sb.from('usuarios').upsert({tipo:'empleado',empresa_id:empId,cuit_cuil:emp.cuil,nombre:emp.nombre,primer_acceso:true},{onConflict:'cuit_cuil'});
+      creados++;
+    }
+  }
+  alert(`✅ Importación completa: ${creados} empleados creados, ${actualizados} actualizados.`);
+  cargarTablaEmpleados(empId);
+}
+
+async function cargarTablaEmpleados(empId){
+  const{data:empleados}=await sb.from('empleados').select('*').eq('empresa_id',empId).eq('activo',true).order('nombre');
+  if(!empleados?.length){document.getElementById('tabla-empleados').innerHTML=`<div class="empty"><div class="empty-icon">👥</div><div class="empty-title">Sin empleados</div><div class="empty-sub">Importalos desde ARCA.</div></div>`;return;}
+  let html=`<table><thead><tr><th>Nombre</th><th>CUIL</th><th>Categoría</th><th>Ingreso</th><th>Email</th></tr></thead><tbody>`;
+  empleados.forEach(e=>{
+    html+=`<tr><td><strong>${e.nombre}</strong></td><td>${fc(e.cuil)}</td><td>${e.categoria||'—'}</td><td>${e.fecha_ingreso||'—'}</td><td>${e.email||'<span style="color:var(--text3)">Sin email</span>'}</td></tr>`;
+  });
+  html+=`</tbody></table>`;
+  document.getElementById('tabla-empleados').innerHTML=html;
+}
+
+// ─── PROCESAR XLS ───
+async function procesarXLS(){
+  const empId=document.getElementById('select-empresa').value;
+  if(!empId){alert('Seleccioná una empresa primero.');return;}
+  if(!xlsData){alert('Subí el archivo .xls primero.');return;}
+
+  const{data:empleados}=await sb.from('empleados').select('id,cuil,nombre').eq('empresa_id',empId);
+  const mapCuil={};
+  empleados?.forEach(e=>mapCuil[nc(e.cuil)]=e);
+
+  let ok=0,skip=0,sinEmpleado=[];
+  for(const rec of xlsData){
+    const cuil=nc(rec.CUIL||'');
+    const empleado=mapCuil[cuil];
+    if(!empleado){sinEmpleado.push(rec.Empleado||cuil);continue;}
+
+    const payload={
+      empresa_id:empId,empleado_id:empleado.id,
+      periodo:rec.Período||'',tipo:rec.Tipo||'',
+      fecha_pago:rec.Fecha?rec.Fecha.split('/').reverse().join('-'):null,
+      total_haberes:pc(rec.Haberes),total_no_rem:pc(rec['No Remun.']),
+      total_descuentos:pc(rec.Retenciones||rec.Descuentos),
+      neto:pc(rec.Neto),neto_redondeado:pc(rec.Redondeado||rec.Neto),
+      datos_json:rec,estado:'borrador',
+    };
+
+    const{error}=await sb.from('recibos').upsert(payload,{onConflict:'empresa_id,empleado_id,periodo,tipo'});
+    if(!error)ok++;else skip++;
+  }
+
+  let msg=`✅ ${ok} recibos guardados como borrador.`;
+  if(sinEmpleado.length)msg+=`\n⚠️ ${sinEmpleado.length} sin empleado en el sistema: ${sinEmpleado.slice(0,3).join(', ')}${sinEmpleado.length>3?'...':''}`;
+  if(skip)msg+=`\n❌ ${skip} errores.`;
+  alert(msg);
+}
+
+// ─── EMPLEADOR ───
+async function initEmpleador(){
+  const{data:empresa}=await sb.from('empresas').select('*').eq('id',currentUser.empresa_id).single();
+  currentEmpresa=empresa;
+  document.getElementById('topbar-empresa').textContent=empresa?.nombre||'';
+  document.getElementById('empleador-empresa-sub').textContent=empresa?.nombre+' · '+fc(empresa?.cuit||'');
+
+  const sidebarItems=[
+    {section:'Mi empresa'},
+    {icon:'🏠',label:'Panel empresa',page:'page-empleador-dashboard',active:true},
+  ];
+
+  if(currentUser.dobleRol){
+    sidebarItems.push({section:'Mis recibos'});
+    sidebarItems.push({icon:'📄',label:'Mis recibos',page:'page-empleado-recibos'});
+  }
+
+  buildSidebar(sidebarItems);
+  document.getElementById('page-empleador-dashboard').classList.add('active');
+  await cargarRecibosEmpleador();
+
+  if(currentUser.dobleRol){
+    await cargarRecibosEmpleado();
+  }
+}
+
+async function cargarRecibosEmpleador(){
+  const{data:recibos}=await sb.from('recibos').select('*,empleados(nombre,cuil)').eq('empresa_id',currentUser.empresa_id).order('created_at',{ascending:false});
+
+  const borradores=recibos?.filter(r=>r.estado==='borrador')||[];
+  const publicados=recibos?.filter(r=>r.estado==='publicado')||[];
+  const{data:constancias}=await sb.from('constancias').select('recibo_id');
+  const firmadosIds=new Set(constancias?.map(c=>c.recibo_id)||[]);
+
+  document.getElementById('emp-st-total').textContent=recibos?.length||0;
+  document.getElementById('emp-st-pendientes').textContent=borradores.length;
+  document.getElementById('emp-st-firmados').textContent=firmadosIds.size;
+  document.getElementById('emp-st-sinfirma').textContent=publicados.filter(r=>!firmadosIds.has(r.id)).length;
+
+  if(!recibos?.length){document.getElementById('tabla-recibos-empleador').innerHTML=`<div class="empty"><div class="empty-icon">📄</div><div class="empty-title">Sin recibos todavía</div></div>`;return;}
+
+  let html=`<div class="card"><div class="card-title">Recibos del período</div><table><thead><tr><th>Empleado</th><th>Período</th><th>Tipo</th><th>Neto</th><th>Estado</th><th>Firma</th><th></th></tr></thead><tbody>`;
+  recibos.forEach(r=>{
+    const firmado=firmadosIds.has(r.id);
+    const badgeClass={borrador:'badge-borrador',publicado:'badge-publicado',revocado:'badge-revocado'}[r.estado];
+    const firmaHtml=r.estado==='publicado'?(firmado?`<div class="semaforo"><div class="dot dot-green"></div>Firmado</div>`:`<div class="semaforo"><div class="dot dot-yellow"></div>Pendiente</div>`):'—';
+    const accionHtml=`<button class="btn-sm btn-outline" style="margin-right:6px;" onclick="verRecibo('${r.id}')">Ver</button>${r.estado==='borrador'?`<button class="btn-sm btn-success" onclick="aprobarRecibo('${r.id}')">Aprobar</button>`:''}`;
+    html+=`<tr>
+      <td><strong>${r.empleados?.nombre||'—'}</strong></td>
+      <td>${parseMes(r.periodo)}</td><td>${r.tipo}</td>
+      <td>${mon(r.neto_redondeado||r.neto)}</td>
+      <td><span class="badge ${badgeClass}">${r.estado}</span></td>
+      <td>${firmaHtml}</td><td>${accionHtml}</td>
+    </tr>`;
+  });
+  html+=`</tbody></table></div>`;
+  document.getElementById('tabla-recibos-empleador').innerHTML=html;
+}
+
+async function verRecibo(reciboId){
+  const{data:r}=await sb.from('recibos').select('*,empleados(*),empresas(*)').eq('id',reciboId).single();
+  if(!r)return;
+  const datos=r.datos_json||{};
+  const SKIP=['Período','Tipo','Fecha','Fecha Alta','Fecha Baja','Modo Contrato','Categoria','CUIL','Legajo','Empleado','Haberes','No Remun.','Descuentos','Retenciones','Neto','Redondeado','Rem 4 y 8','Rem 9','Cont Tar Dif','Imp A Detraer','Cont Adic OS','% Adic SS'];
+  const PCTS_MODAL={'201':11,'202':3,'206':2,'209':0.5,'221':3};
+  const conceptos=[];
+  Object.entries(datos).forEach(([k,v])=>{
+    if(SKIP.includes(k)||!k.match(/^\d+$/))return;
+    const val=pc(v);if(!val)return;
+    const info=conceptosMap[k]||{nombre:'Concepto '+k,tipo:'rem'};
+    conceptos.push({cod:k,nombre:info.nombre,tipo:info.tipo,importe:val});
+  });
+
+  // Cargar contribuciones reales de la empresa
+  const{data:contrib_cfg}=await sb.from('contribuciones_empresa').select('*').eq('empresa_id',r.empresa_id).single();
+  const cfg=contrib_cfg||{};
+  
+  const remBase=conceptos.filter(c=>c.tipo==='rem').reduce((s,c)=>s+c.importe,0);
+  
+  const CONTRIB_M=[
+    {nombre:'Contribución Jubilación (SIPA)',    pct:parseFloat(cfg.SIPA||16),   tipo:'pct'},
+    {nombre:'Contribución INSSJP / PAMI',        pct:parseFloat(cfg.PAMI||2),    tipo:'pct'},
+    {nombre:'Fondo Nacional de Empleo',          pct:parseFloat(cfg.FNE||1.5),   tipo:'pct'},
+    {nombre:'Contribución AAFF',                 pct:parseFloat(cfg.AAFF||4.4),  tipo:'pct'},
+    {nombre:'Contribución Obra Social',          pct:parseFloat(cfg['Obra Social']||6), tipo:'pct'},
+    {nombre:'LRT',                               pct:parseFloat(cfg.LRT||0),     tipo:'pct'},
+    {nombre:'Seguro de Vida Colectivo',          monto:parseFloat(cfg.SVC||0),   tipo:'fijo'},
+    {nombre:'FFEP',                              monto:parseFloat(cfg.FFEP||0),  tipo:'fijo'},
+  ];
+  const contrib=CONTRIB_M.map(c=>({
+    ...c,
+    monto:c.tipo==='pct'?Math.round(remBase*c.pct/100):c.monto
+  }));
+  const totalContrib=contrib.reduce((s,c)=>s+c.monto,0);
+  const costoTotal=r.total_haberes+r.total_no_rem+totalContrib;
+  const emp=r.empleados||{};
+  const empresa=r.empresas||{};
+
+  const rowsContrib=contrib.filter(c=>c.monto>0).map(c=>`
+    <div style="display:grid;grid-template-columns:1fr 60px 110px 110px;padding:5px 12px;font-size:12px;border-bottom:0.5px solid var(--border);">
+      <span>${c.nombre}</span>
+      <span style="text-align:right;">${c.tipo==='pct'?c.pct.toFixed(2)+'%':'fijo'}</span>
+      <span style="text-align:right;">${c.tipo==='pct'?mon(remBase):'—'}</span>
+      <span style="text-align:right;">${mon(c.monto)}</span>
+    </div>`).join('');
+
+  const rowsConc=conceptos.map(c=>`
+    <div style="display:grid;grid-template-columns:1fr 60px 110px 110px;padding:5px 12px;font-size:12px;border-bottom:0.5px solid var(--border);">
+      <span><span style="color:var(--text3);font-size:11px;margin-right:3px;">${c.cod}.</span>${c.nombre}</span>
+      <span style="text-align:right;">${PCTS_MODAL[c.cod]?PCTS_MODAL[c.cod].toFixed(2)+'%':'—'}</span>
+      <span style="text-align:right;">${PCTS_MODAL[c.cod]?mon(remBase):'—'}</span>
+      <span style="text-align:right;color:${c.tipo==='ded'?'var(--danger)':c.tipo==='norem'?'#854F0B':'var(--text)'};">${mon(c.importe)}</span>
+    </div>`).join('');
+
+  document.getElementById('modal-recibo-title').textContent='Vista previa del recibo';
+  document.getElementById('modal-recibo-body').innerHTML=`
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+
+      <!-- HEADER -->
+      <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:12px 16px;border-bottom:2px solid var(--navy2);">
+        <div>
+          <div style="font-size:15px;font-weight:600;color:var(--navy2);">${empresa.nombre||'—'}</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:2px;">CUIT: ${fc(empresa.cuit||'')} · ${empresa.domicilio||''}</div>
+        </div>
+        <div style="text-align:right;font-size:11px;color:var(--text3);">Decreto 407/2026<br>Art. 140 LCT</div>
+      </div>
+
+      <!-- DATOS EMPLEADO -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid var(--border);">
+        <div style="padding:8px 12px;border-right:0.5px solid var(--border);">
+          <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">APELLIDO Y NOMBRE</div>
+          <div style="font-size:13px;font-weight:600;color:var(--navy);">${emp.nombre||'—'}</div>
+        </div>
+        <div style="padding:8px 12px;border-right:0.5px solid var(--border);">
+          <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">CUIL</div>
+          <div style="font-size:13px;font-weight:600;">${fc(emp.cuil||'')}</div>
+        </div>
+        <div style="padding:8px 12px;">
+          <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">CATEGORÍA</div>
+          <div style="font-size:13px;font-weight:600;">${emp.categoria||'—'}</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);border-bottom:2px solid var(--border);">
+        <div style="padding:8px 12px;border-right:0.5px solid var(--border);">
+          <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">PERÍODO</div>
+          <div style="font-size:12px;font-weight:500;">${parseMes(r.periodo)} · ${r.tipo}</div>
+        </div>
+        <div style="padding:8px 12px;border-right:0.5px solid var(--border);">
+          <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">FECHA INGRESO</div>
+          <div style="font-size:12px;font-weight:500;">${emp.fecha_ingreso||'—'}</div>
+        </div>
+        <div style="padding:8px 12px;">
+          <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">OBRA SOCIAL</div>
+          <div style="font-size:11px;font-weight:500;">${emp.obra_social||'—'}</div>
+        </div>
+      </div>
+
+      <!-- COSTO EMPLEADOR -->
+      <div style="display:flex;justify-content:space-between;align-items:center;background:var(--navy2);color:#fff;padding:7px 12px;">
+        <span style="font-size:12px;font-weight:600;letter-spacing:.03em;">COSTO TOTAL EMPLEADOR</span>
+        <span style="font-size:13px;font-weight:600;">${mon(costoTotal)}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 60px 110px 110px;padding:4px 12px;font-size:11px;color:var(--text3);border-bottom:0.5px solid var(--border-strong);">
+        <span>Concepto</span><span style="text-align:right;">%</span><span style="text-align:right;">Base</span><span style="text-align:right;">Monto</span>
+      </div>
+      ${rowsContrib}
+      <div style="display:flex;justify-content:space-between;padding:5px 12px;background:#e8edf5;border-top:1px solid #b0bdd6;border-bottom:1px solid #b0bdd6;">
+        <span style="font-size:11px;font-weight:600;color:var(--navy2);">SUBTOTAL CONTRIBUCIONES</span>
+        <span style="font-size:11px;font-weight:600;color:var(--navy2);">${mon(totalContrib)}</span>
+      </div>
+
+      <!-- SUELDO BRUTO -->
+      <div style="display:flex;justify-content:space-between;align-items:center;background:var(--navy2);color:#fff;padding:7px 12px;">
+        <span style="font-size:12px;font-weight:600;letter-spacing:.03em;">SUELDO BRUTO</span>
+        <span style="font-size:13px;font-weight:600;">${mon(r.total_haberes+r.total_no_rem)}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 60px 110px 110px;padding:4px 12px;font-size:11px;color:var(--text3);border-bottom:0.5px solid var(--border-strong);">
+        <span>Concepto</span><span style="text-align:right;">%</span><span style="text-align:right;">Base</span><span style="text-align:right;">Monto</span>
+      </div>
+      ${rowsConc}
+      <div style="display:flex;justify-content:space-between;padding:6px 12px;background:var(--surface-1,#f8f9fb);border-top:1px solid var(--border);font-size:11px;color:var(--text2);">
+        <span><b>Remunerativo: ${mon(r.total_haberes)}</b></span>
+        <span><b>No Remunerativo: ${mon(r.total_no_rem)}</b></span>
+        <span><b>Descuentos: ${mon(r.total_descuentos)}</b></span>
+      </div>
+
+      <!-- NETO -->
+      <div style="display:flex;justify-content:space-between;align-items:center;background:var(--navy2);color:#fff;padding:12px 16px;">
+        <span style="font-size:14px;font-weight:600;letter-spacing:.03em;">SUELDO NETO A COBRAR</span>
+        <span style="font-size:20px;font-weight:700;">${mon(r.neto_redondeado||r.neto)}</span>
+      </div>
+
+      <!-- PANEL INFERIOR: composicion + grafico -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--border);">
+        <div style="padding:12px;border-right:1px solid var(--border);">
+          <div style="font-size:11px;font-weight:600;color:#fff;background:var(--navy2);padding:3px 10px;border-radius:4px;margin-bottom:8px;display:inline-block;">COMPOSICIÓN SALARIAL</div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:0.5px solid var(--border);color:var(--text2);"><span><b>Costo total empleador:</b></span><span><b>${mon(costoTotal)}</b></span></div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:0.5px solid var(--border);color:var(--text2);"><span>Contribuciones patronales</span><span>${mon(totalContrib)}</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:0.5px solid var(--border);color:var(--text2);"><span>Sueldo bruto</span><span>${mon(r.total_haberes+r.total_no_rem)}</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:0.5px solid var(--border);color:var(--text2);"><span>Descuentos trabajador</span><span>${mon(r.total_descuentos)}</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 0;color:var(--navy2);font-weight:600;"><span>Neto a cobrar</span><span>${mon(r.neto_redondeado||r.neto)}</span></div>
+          <div style="font-size:10px;color:var(--text3);margin-top:6px;font-style:italic;">Contrib. patronales estimadas — Art. 140 Dto. 407/2026</div>
+        </div>
+        <div style="padding:12px;display:flex;flex-direction:column;align-items:center;">
+          <div style="font-size:11px;font-weight:600;color:#fff;background:var(--navy2);padding:3px 10px;border-radius:4px;margin-bottom:8px;display:inline-block;">DISTRIBUCIÓN DE COSTOS</div>
+          <canvas id="pie-modal" width="140" height="140"></canvas>
+          <div id="pie-modal-leyenda" style="margin-top:8px;font-size:10px;width:100%;"></div>
+        </div>
+      </div>
+
+    </div>
+  `;
+
+  // Renderizar gráfico
+  setTimeout(()=>{
+    const canvas=document.getElementById('pie-modal');
+    if(!canvas)return;
+    const netoVal=r.neto_redondeado||r.neto;
+    const datos=[
+      {label:'Sueldo Neto',      val:netoVal,        color:'#0f1f3d'},
+      {label:'Contribuciones',   val:totalContrib,   color:'#3b6fd4'},
+      {label:'Descuentos trab.', val:r.total_descuentos, color:'#e8b84b'},
+      {label:'No Remunerativo',  val:r.total_no_rem, color:'#5b8de8'},
+    ].filter(d=>d.val>0);
+    const total=datos.reduce((s,d)=>s+d.val,0);
+    datos.forEach(d=>d.pct=Math.round(d.val*1000/total)/10);
+    if(window._pieModal) window._pieModal.destroy();
+    window._pieModal=new Chart(canvas.getContext('2d'),{
+      type:'doughnut',
+      data:{labels:datos.map(d=>d.label),datasets:[{data:datos.map(d=>d.val),backgroundColor:datos.map(d=>d.color),borderWidth:2,borderColor:'#fff'}]},
+      options:{responsive:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.label}: ${datos[c.dataIndex].pct}%`}}}}
+    });
+    const ley=document.getElementById('pie-modal-leyenda');
+    if(ley) ley.innerHTML=datos.map(d=>`<div style="display:flex;align-items:center;gap:5px;margin:2px 0;color:var(--text2);"><span style="width:9px;height:9px;border-radius:50%;background:${d.color};flex-shrink:0;display:inline-block;"></span>${d.label} <b style="color:var(--text);">${d.pct}%</b></div>`).join('');
+  },150);
+
+  const actions=document.getElementById('modal-recibo-actions');
+  if(r.estado==='borrador'){
+    actions.innerHTML=`<button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-ver-recibo')">Cancelar</button><button class="btn-sm btn-success" style="flex:1;padding:10px;" onclick="aprobarRecibo('${r.id}')">✅ Aprobar este recibo</button>`;
+  } else {
+    actions.innerHTML=`<button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-ver-recibo')">Cerrar</button>`;
+  }
+  abrirModal('modal-ver-recibo');
+}
+
+async function aprobarRecibo(reciboId){
+  if(!confirm('¿Aprobás este recibo? El empleado recibirá la notificación.'))return;
+  await sb.from('recibos').update({estado:'publicado'}).eq('id',reciboId);
+  await sb.from('recibo_historial').insert({recibo_id:reciboId,accion:'aprobado',usuario_id:currentUser.id});
+  cerrarModal('modal-ver-recibo');
+  await cargarRecibosEmpleador();
+}
+
+// ─── REVOCAR ───
+let reciboARevocar=null;
+function iniciarRevocacion(reciboId){reciboARevocar=reciboId;abrirModal('modal-revocar');}
+async function confirmarRevocacion(){
+  const motivo=document.getElementById('motivo-revocacion').value.trim();
+  if(!motivo){alert('Ingresá el motivo de revocación.');return;}
+  await sb.from('recibos').update({estado:'revocado'}).eq('id',reciboARevocar);
+  await sb.from('recibo_historial').insert({recibo_id:reciboARevocar,accion:'revocado',usuario_id:currentUser.id,motivo});
+  cerrarModal('modal-revocar');
+  reciboARevocar=null;
+  cargarRecibosContador();
+}
+
+// ─── EMPLEADO ───
+async function initEmpleado(){
+  buildSidebar([
+    {icon:'📄',label:'Mis recibos',page:'page-empleado-recibos',active:true},
+  ]);
+  document.getElementById('page-empleado-recibos').classList.add('active');
+  await cargarRecibosEmpleado();
+}
+
+async function cargarRecibosEmpleado(){
+  const{data:empData}=await sb.from('empleados').select('*').eq('id',currentUser.empleado_id).single();
+  const{data:recibos}=await sb.from('recibos').select('*').eq('empleado_id',currentUser.empleado_id).eq('estado','publicado').order('created_at',{ascending:false});
+  const{data:constancias}=await sb.from('constancias').select('recibo_id').eq('empleado_id',currentUser.empleado_id);
+  const firmadosIds=new Set(constancias?.map(c=>c.recibo_id)||[]);
+
+  if(!recibos?.length){document.getElementById('lista-recibos-empleado').innerHTML=`<div class="empty"><div class="empty-icon">📭</div><div class="empty-title">Sin recibos disponibles</div><div class="empty-sub">Cuando tu empleador apruebe tus recibos van a aparecer acá.</div></div>`;return;}
+
+  let html='';
+  recibos.forEach(r=>{
+    const firmado=firmadosIds.has(r.id);
+    const datos=r.datos_json||{};
+    const conceptos=[];
+    const SKIP=['Período','Tipo','Fecha','Fecha Alta','Fecha Baja','Modo Contrato','Categoria','CUIL','Legajo','Empleado','Haberes','No Remun.','Descuentos','Retenciones','Neto','Redondeado','Rem 4 y 8','Rem 9','Cont Tar Dif','Imp A Detraer','Cont Adic OS','% Adic SS'];
+    Object.entries(datos).forEach(([k,v])=>{
+      if(SKIP.includes(k)||!k.match(/^\d+$/))return;
+      const val=pc(v);if(!val)return;
+      const info=conceptosMap[k]||{nombre:'Concepto '+k,tipo:'rem'};
+      conceptos.push({cod:k,nombre:info.nombre,tipo:info.tipo,importe:val});
+    });
+
+    html+=`<div class="recibo-preview">
+      <div class="rp-head">
+        <div><div class="rp-head-title">${parseMes(r.periodo)} · ${r.tipo}</div><div style="font-size:11px;opacity:.7;margin-top:2px;">${empData?.nombre||''}</div></div>
+        <div class="rp-head-badge">${firmado?'✅ Firmado':'⏳ Pendiente de firma'}</div>
+      </div>
+      <div class="rp-body">
+        <div class="rp-grid">
+          <div class="rp-field"><div class="rp-field-lbl">CUIL</div><div class="rp-field-val">${fc(empData?.cuil||'')}</div></div>
+          <div class="rp-field"><div class="rp-field-lbl">Categoría</div><div class="rp-field-val">${empData?.categoria||'—'}</div></div>
+          <div class="rp-field"><div class="rp-field-lbl">Ingreso</div><div class="rp-field-val">${empData?.fecha_ingreso||'—'}</div></div>
+          <div class="rp-field"><div class="rp-field-lbl">Fecha pago</div><div class="rp-field-val">${r.fecha_pago||'—'}</div></div>
+        </div>
+        <table class="rp-table">
+          <thead><tr><th style="text-align:left;">Concepto</th><th>Monto</th></tr></thead>
+          <tbody>
+            ${conceptos.map(c=>`<tr><td><span style="color:var(--text3);font-size:11px;margin-right:4px;">${c.cod}.</span>${c.nombre}</td><td style="color:${c.tipo==='ded'?'var(--danger)':'var(--text)'};">${c.tipo==='ded'?'- ':''}${mon(c.importe)}</td></tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div class="rp-neto"><span>NETO A COBRAR</span><span>${mon(r.neto_redondeado||r.neto)}</span></div>
+      ${!firmado?`<div style="padding:16px;text-align:center;"><button class="btn btn-gold" style="width:auto;padding:10px 28px;" onclick="iniciarFirma('${r.id}')">✍️ Confirmar recepción</button></div>`:`<div class="constancia-box" style="margin:16px;"><div class="constancia-icon">✅</div><div class="constancia-title">Recibo confirmado</div><div class="constancia-detail">Firmado digitalmente con tu usuario</div></div>`}
+    </div>`;
+  });
+  document.getElementById('lista-recibos-empleado').innerHTML=html;
+}
+
+let reciboAFirmar=null;
+function iniciarFirma(reciboId){reciboAFirmar=reciboId;abrirModal('modal-firmar');}
+async function confirmarFirma(){
+  if(!reciboAFirmar)return;
+  await sb.from('constancias').insert({recibo_id:reciboAFirmar,empleado_id:currentUser.empleado_id,ip:'registrada',user_agent:navigator.userAgent});
+  cerrarModal('modal-firmar');
+  reciboAFirmar=null;
+  await cargarRecibosEmpleado();
+}
+
+// ─── PARSERS ARCHIVOS ───
+function parseConceptosTxt(text){
+  const map={};
+  for(const line of text.split('\n').filter(l=>l.trim())){
+    const tipo=line.slice(0,2);
+    const cod=line.slice(12,16).replace(/^0+/,'')||'0';
+    const nom=line.slice(16).replace(/\s{2,}[\d\s]+$/,'').trim();
+    let t='rem';
+    if(tipo==='55')t='norem';
+    else if(tipo==='81'||tipo==='82')t='ded';
+    map[cod]={nombre:nom,tipo:t};
+  }
+  return map;
+}
+
+function parseXLSHtml(html){
+  const doc=new DOMParser().parseFromString(html,'text/html');
+  const rows=[...doc.querySelectorAll('tr')].map(r=>[...r.querySelectorAll('td')].map(c=>c.textContent.trim()));
+  const headers=rows[4]||[];
+  const result=[];
+  for(let i=5;i<rows.length;i++){
+    const row=rows[i];
+    if(!row||row.length<10)continue;
+    const cuil=nc(row[headers.indexOf('CUIL')]||'');
+    if(!cuil||cuil.length<11)continue;
+    const rec={};
+    headers.forEach((h,j)=>{if(j<row.length&&row[j])rec[h]=row[j];});
+    result.push(rec);
+  }
+  return result;
+}
+
+function parseARCAtxt(text){
+  const lines=text.split('\n').filter(l=>l.trim()&&!l.startsWith('CUIL'));
+  return lines.map(line=>{
+    if(line.length<50)return null;
+    const cuil=line.slice(0,11).trim();
+    if(!cuil.match(/^\d{11}$/))return null;
+    const fi=line.slice(714,724).trim();
+    return{
+      cuil,dni:cuil.slice(2,10),
+      nombre:line.slice(12,72).trim(),
+      obra_social:line.slice(72,232).trim(),
+      modalidad:line.slice(232,332).trim(),
+      puesto:line.slice(392,647).trim(),
+      categoria:line.slice(880,940).trim(),
+      fecha_ingreso:fi?fi.split('/').reverse().join('-'):null,
+    };
+  }).filter(Boolean);
+}
+
+// ─── SETUP UPLOADS ───
+function setupUploads(){
+  const fiXls=document.getElementById('fi-xls-main');
+  const fiConc=document.getElementById('fi-conc-main');
+  const fiArca=document.getElementById('fi-arca');
+
+  fiXls?.addEventListener('change',e=>{
+    const f=e.target.files[0];if(!f)return;
+    const r=new FileReader();
+    r.onload=ev=>{xlsData=parseXLSHtml(ev.target.result);document.getElementById('dz-xls-main').classList.add('loaded');document.querySelector('#dz-xls-main .upload-sub').textContent=`✅ ${xlsData.length} recibos leídos`;};
+    r.readAsText(f,'UTF-8');
+  });
+
+  fiConc?.addEventListener('change',e=>{
+    const f=e.target.files[0];if(!f)return;
+    const r=new FileReader();
+    r.onload=ev=>{conceptosMap={...CONCEPTOS_DEFAULT,...parseConceptosTxt(ev.target.result)};document.getElementById('dz-conc-main').classList.add('loaded');};
+    r.readAsText(f,'UTF-8');
+  });
+
+  fiArca?.addEventListener('change',e=>{
+    const f=e.target.files[0];if(!f)return;
+    const r=new FileReader();
+    r.onload=ev=>{arcaData=parseARCAtxt(ev.target.result);document.getElementById('dz-arca').classList.add('loaded');document.querySelector('#dz-arca .upload-sub').textContent=`✅ ${arcaData.length} empleados leídos`;};
+    r.readAsText(f,'UTF-8');
+  });
+
+  // Setup drag & drop
+  ['dz-xls-main','dz-conc-main','dz-arca'].forEach(id=>{
+    const dz=document.getElementById(id);
+    if(!dz)return;
+    dz.addEventListener('dragover',e=>{e.preventDefault();dz.style.borderColor='var(--accent)';});
+    dz.addEventListener('dragleave',()=>dz.style.borderColor='');
+    dz.addEventListener('drop',e=>{e.preventDefault();dz.style.borderColor='';const inp=dz.querySelector('input');if(inp&&e.dataTransfer.files[0]){inp.files=e.dataTransfer.files;inp.dispatchEvent(new Event('change'));}});
+  });
+
+  document.getElementById('select-empresa-empl')?.addEventListener('change',e=>{
+    if(e.target.value)cargarTablaEmpleados(e.target.value);
+  });
+}
+
+function verEmpresa(empId){
+  document.getElementById('filtro-empresa-rec').value=empId;
+  navTo('page-recibos-contador',document.querySelectorAll('.sidebar-item')[3]||null);
+  cargarRecibosContador();
+}
+
+// ─── INIT ───
+window.addEventListener('DOMContentLoaded',async()=>{
+  const{data:{session}}=await sb.auth.getSession();
+  if(session){
+    const{data:usuario}=await sb.from('usuarios').select('*').eq('auth_id',session.user.id).single();
+    if(usuario){currentUser=usuario;iniciarApp();return;}
+  }
+});
+</script>
+</body>
+</html>
