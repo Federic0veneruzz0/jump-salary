@@ -267,7 +267,11 @@ tr:last-child td{border-bottom:none;}
           <div class="stat danger"><div class="stat-val" id="st-pendientes">—</div><div class="stat-lbl">Pendientes de firma</div></div>
         </div>
         <div class="card">
-          <div class="card-title">Empresas clientes</div>
+          <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;border-bottom:none;margin-bottom:0;padding-bottom:0;">
+            <span>Empresas clientes</span>
+            <button class="btn-sm btn-gold" onclick="abrirModal('modal-nuevo-cliente')">+ Nuevo cliente</button>
+          </div>
+          <div style="border-bottom:1px solid var(--border);margin:10px 0 14px;"></div>
           <div id="tabla-empresas"><div class="loading">Cargando...</div></div>
         </div>
       </div>
@@ -435,6 +439,22 @@ tr:last-child td{border-bottom:none;}
     </div>
     <div style="text-align:center;margin-top:12px;">
       <button class="btn-sm btn-outline" onclick="cerrarModal('modal-firmar')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL NUEVO CLIENTE -->
+<div class="modal-overlay" id="modal-nuevo-cliente">
+  <div class="modal">
+    <div class="modal-title">Nuevo cliente</div>
+    <div class="modal-sub">Creá la empresa y el acceso inicial del empleador. Las contribuciones se configuran después con valores estándar que podés ajustar.</div>
+    <div id="nc-err" class="err" style="display:none;"></div>
+    <div class="field"><label>Nombre de la empresa</label><input id="nc-nombre-empresa" type="text" placeholder="Ej: Elina Lorenzo SAS"></div>
+    <div class="field"><label>CUIT de la empresa</label><input id="nc-cuit-empresa" type="text" placeholder="Ej: 30719136849" maxlength="13"></div>
+    <div class="field"><label>Nombre del empleador / contacto</label><input id="nc-nombre-empleador" type="text" placeholder="Ej: Ignacio Baratta"></div>
+    <div class="modal-actions">
+      <button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-nuevo-cliente')">Cancelar</button>
+      <button class="btn-sm btn-success" style="flex:1;" onclick="crearCliente()">Crear cliente</button>
     </div>
   </div>
 </div>
@@ -671,7 +691,7 @@ async function cargarDashboardContador(){
   document.getElementById('st-pendientes').textContent=publicados?.length||0;
 
   if(!empresas?.length){
-    document.getElementById('tabla-empresas').innerHTML=`<div class="empty"><div class="empty-icon">🏢</div><div class="empty-title">Sin empresas todavía</div><div class="empty-sub">Agregá clientes desde la sección Empleados.</div></div>`;
+    document.getElementById('tabla-empresas').innerHTML=`<div class="empty"><div class="empty-icon">🏢</div><div class="empty-title">Sin empresas todavía</div><div class="empty-sub">Hacé clic en "+ Nuevo cliente" para agregar el primero.</div></div>`;
     return;
   }
   let html=`<table><thead><tr><th>Empresa</th><th>CUIT</th><th>Empleados</th><th></th></tr></thead><tbody>`;
@@ -692,6 +712,63 @@ async function cargarSelectEmpresas(){
     sel.innerHTML=first;
     empresas?.forEach(e=>{sel.innerHTML+=`<option value="${e.id}">${e.nombre}</option>`;});
   });
+}
+
+// ─── ALTA DE CLIENTES (self-service, sin tocar Supabase) ───
+async function crearCliente(){
+  const errBox=document.getElementById('nc-err');
+  errBox.style.display='none';
+
+  const nombreEmpresa=document.getElementById('nc-nombre-empresa').value.trim();
+  const cuitEmpresa=nc(document.getElementById('nc-cuit-empresa').value);
+  const nombreEmpleador=document.getElementById('nc-nombre-empleador').value.trim();
+
+  if(!nombreEmpresa||!cuitEmpresa||!nombreEmpleador){
+    errBox.textContent='Completá todos los campos.';errBox.style.display='block';return;
+  }
+  if(cuitEmpresa.length!==11){
+    errBox.textContent='El CUIT debe tener 11 dígitos.';errBox.style.display='block';return;
+  }
+
+  // Verificar que no exista ya un usuario con ese CUIT (login único)
+  const{data:existeUsuario}=await sb.from('usuarios').select('id').eq('cuit_cuil',cuitEmpresa).maybeSingle();
+  if(existeUsuario){
+    errBox.textContent='Ya existe un usuario con ese CUIT en el sistema.';errBox.style.display='block';return;
+  }
+
+  const btn=document.querySelector('#modal-nuevo-cliente .btn-success');
+  const textoOriginal=btn.textContent;
+  btn.disabled=true;btn.textContent='Creando...';
+
+  try{
+    // 1. Crear la empresa
+    const{data:empresa,error:errEmp}=await sb.from('empresas').insert({nombre:nombreEmpresa,cuit:cuitEmpresa,activa:true}).select().single();
+    if(errEmp)throw errEmp;
+
+    // 2. Crear el usuario empleador (login con CUIT + DNI como clave inicial, igual que un empleado)
+    const{error:errUsr}=await sb.from('usuarios').insert({tipo:'empleador',empresa_id:empresa.id,cuit_cuil:cuitEmpresa,nombre:nombreEmpleador,primer_acceso:true});
+    if(errUsr)throw errUsr;
+
+    // 3. Crear contribuciones por defecto (valores estándar, el contador los puede ajustar luego)
+    await sb.from('contribuciones_empresa').insert({empresa_id:empresa.id,SIPA:16,PAMI:2,FNE:1.5,AAFF:4.4,'Obra Social':6,LRT:0,SVC:0,FFEP:0});
+
+    cerrarModal('modal-nuevo-cliente');
+    document.getElementById('nc-nombre-empresa').value='';
+    document.getElementById('nc-cuit-empresa').value='';
+    document.getElementById('nc-nombre-empleador').value='';
+
+    await cargarDashboardContador();
+    await cargarSelectEmpresas();
+
+    const dniInicial=cuitEmpresa.slice(2,10);
+    alert(`✅ Cliente creado.\n\nEl empleador ${nombreEmpleador} ya puede ingresar con:\nCUIT: ${fc(cuitEmpresa)}\nContraseña inicial: ${dniInicial}\n\n(En el primer ingreso le va a pedir crear su contraseña definitiva y su email.)`);
+  }catch(err){
+    console.error('Error creando cliente:',err);
+    errBox.textContent='Ocurrió un error al crear el cliente. Probá de nuevo.';
+    errBox.style.display='block';
+  }finally{
+    btn.disabled=false;btn.textContent=textoOriginal;
+  }
 }
 
 async function cargarRecibosContador(){
