@@ -6,6 +6,8 @@
 <title>Jump Salary — Sistema de Recibos</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 :root {
   --navy: #0f1f3d;
@@ -1040,7 +1042,7 @@ async function verRecibo(reciboId){
   if(r.estado==='borrador'){
     actions.innerHTML=`<button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-ver-recibo')">Cancelar</button><button class="btn-sm btn-success" style="flex:1;padding:10px;" onclick="aprobarRecibo('${r.id}')">✅ Aprobar este recibo</button>`;
   } else {
-    actions.innerHTML=`<button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-ver-recibo')">Cerrar</button>`;
+    actions.innerHTML=`<button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-ver-recibo')">Cerrar</button><button class="btn-sm btn-outline" style="flex:1;" onclick="generarPDFRecibo('${r.id}',false)">⬇️ Descargar PDF</button>`;
   }
   abrirModal('modal-ver-recibo');
 }
@@ -1111,20 +1113,75 @@ async function verReciboEmpleado(reciboId){
   if(constancia){
     const fechaF=new Date(constancia.fecha_firma);
     const fechaFmt=fechaF.toLocaleDateString('es-AR')+' a las '+fechaF.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})+' hs';
-    actions.innerHTML=`<div class="constancia-box" style="flex:1;"><div class="constancia-icon">✅</div><div class="constancia-title">Recibo confirmado</div><div class="constancia-detail">Firmado digitalmente el ${fechaFmt}</div></div>`;
+    actions.innerHTML=`<div class="constancia-box" style="flex:2;"><div class="constancia-icon">✅</div><div class="constancia-title">Recibo confirmado</div><div class="constancia-detail">Firmado digitalmente el ${fechaFmt}</div></div><button class="btn-sm btn-outline" style="flex:1;" onclick="generarPDFRecibo('${reciboId}',false,true)">⬇️ Descargar PDF</button>`;
   } else {
     actions.innerHTML=`<button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-ver-recibo')">Cerrar</button><button class="btn-sm" style="flex:1;padding:10px;background:var(--gold);color:var(--navy);font-weight:600;border:none;border-radius:var(--radius);cursor:pointer;" onclick="cerrarModal('modal-ver-recibo');iniciarFirma('${reciboId}')">✍️ Confirmar recepción</button>`;
   }
 }
 
 let reciboAFirmar=null;
-function iniciarFirma(reciboId){reciboAFirmar=reciboId;abrirModal('modal-firmar');}
+function iniciarFirma(reciboId){
+  reciboAFirmar=reciboId;
+  abrirModal('modal-firmar');
+}
+
 async function confirmarFirma(){
   if(!reciboAFirmar)return;
-  await sb.from('constancias').insert({recibo_id:reciboAFirmar,empleado_id:currentUser.empleado_id,ip:'registrada',user_agent:navigator.userAgent});
+  const reciboId=reciboAFirmar;
+  await sb.from('constancias').insert({recibo_id:reciboId,empleado_id:currentUser.empleado_id,ip:'registrada',user_agent:navigator.userAgent});
   cerrarModal('modal-firmar');
   reciboAFirmar=null;
   await cargarRecibosEmpleado();
+  // Generar y descargar el PDF del recibo recién firmado
+  await generarPDFRecibo(reciboId,true);
+}
+
+async function generarPDFRecibo(reciboId,cerrarAlTerminar,esVistaEmpleado){
+  if(cerrarAlTerminar===undefined) cerrarAlTerminar=true;
+  // Volvemos a abrir el contenido del recibo (oculto) para capturarlo
+  await verRecibo(reciboId);
+  const contenedor=document.getElementById('modal-recibo-body');
+  if(!contenedor){return;}
+
+  // Esperar a que el gráfico termine de renderizar
+  await new Promise(r=>setTimeout(r,300));
+
+  try{
+    const canvas=await html2canvas(contenedor,{scale:2,backgroundColor:'#ffffff',useCORS:true});
+    const imgData=canvas.toDataURL('image/png');
+    const{jsPDF}=window.jspdf;
+    const pdf=new jsPDF('p','mm','a4');
+    const pageWidth=pdf.internal.pageSize.getWidth();
+    const pageHeight=pdf.internal.pageSize.getHeight();
+    const imgWidth=pageWidth-20;
+    const imgHeight=(canvas.height*imgWidth)/canvas.width;
+
+    let heightLeft=imgHeight;
+    let position=10;
+    pdf.addImage(imgData,'PNG',10,position,imgWidth,Math.min(imgHeight,pageHeight-20));
+    heightLeft-=(pageHeight-20);
+
+    while(heightLeft>0){
+      position=heightLeft-imgHeight+10;
+      pdf.addPage();
+      pdf.addImage(imgData,'PNG',10,position,imgWidth,imgHeight);
+      heightLeft-=pageHeight;
+    }
+
+    const nombreArchivo=`recibo_${reciboId.slice(0,8)}.pdf`;
+    pdf.save(nombreArchivo);
+  }catch(err){
+    console.error('Error generando PDF:',err);
+    alert('No se pudo generar el PDF. El recibo de todas formas quedó confirmado correctamente.');
+  } finally {
+    if(cerrarAlTerminar){
+      cerrarModal('modal-ver-recibo');
+    } else if(esVistaEmpleado){
+      await verReciboEmpleado(reciboId);
+    } else {
+      await verRecibo(reciboId);
+    }
+  }
 }
 
 // ─── PARSERS ARCHIVOS ───
