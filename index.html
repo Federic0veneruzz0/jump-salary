@@ -155,6 +155,13 @@ tr:last-child td{border-bottom:none;}
 .modal-sub{font-size:13px;color:var(--text2);margin-bottom:20px;}
 .modal-actions{display:flex;gap:10px;margin-top:20px;}
 
+.chk-recibo{width:16px;height:16px;cursor:pointer;}
+.chk-recibo:disabled{cursor:not-allowed;opacity:.3;}
+.barra-seleccion{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(120%);background:var(--navy);color:#fff;border-radius:var(--radius-lg);padding:12px 16px;display:flex;align-items:center;gap:14px;box-shadow:var(--shadow-lg);z-index:90;transition:transform .2s ease;}
+.barra-seleccion.visible{transform:translateX(-50%) translateY(0);}
+.barra-seleccion-count{font-size:13px;font-weight:600;}
+.barra-seleccion-count span{color:var(--gold);}
+
 .firma-card{background:linear-gradient(135deg,var(--navy) 0%,var(--navy2) 100%);color:#fff;border-radius:var(--radius-lg);padding:24px;text-align:center;margin-bottom:20px;}
 .firma-icon{font-size:48px;margin-bottom:12px;}
 .firma-title{font-size:18px;font-weight:700;margin-bottom:6px;}
@@ -384,6 +391,13 @@ tr:last-child td{border-bottom:none;}
   </div>
 </div>
 
+<!-- BARRA FLOTANTE DE SELECCIÓN MÚLTIPLE (solo recibos publicados + firmados) -->
+<div class="barra-seleccion" id="barra-seleccion">
+  <div class="barra-seleccion-count"><span id="barra-seleccion-num">0</span> recibo(s) seleccionado(s)</div>
+  <button class="btn-sm btn-gold" onclick="generarPDFMultiple()">⬇️ Descargar PDF combinado</button>
+  <button class="btn-sm btn-outline" style="background:transparent;border-color:rgba(255,255,255,.3);color:#fff;" onclick="limpiarSeleccion()">Limpiar</button>
+</div>
+
 
 <!-- MODAL VER RECIBO -->
 <div class="modal-overlay" id="modal-ver-recibo" style="align-items:flex-start;padding:20px;overflow-y:auto;">
@@ -438,6 +452,7 @@ let reciboActivo = null;
 let xlsData = null;
 let arcaData = null;
 let conceptosMap = {};
+let seleccionados = new Set(); // recibos seleccionados para impresión/descarga múltiple (solo firmados+publicados)
 
 const CONCEPTOS_DEFAULT = {
   '1':{nombre:'Sueldo Basico',tipo:'rem'},'7':{nombre:'Presentismo',tipo:'rem'},
@@ -568,6 +583,7 @@ async function guardarContribuciones(){
 async function doLogout(){
   await sb.auth.signOut();
   currentUser=null;
+  limpiarSeleccion();
   document.getElementById('app').classList.remove('visible');
   document.getElementById('login-wrap').style.display='flex';
   document.getElementById('login-step-1').style.display='block';
@@ -690,9 +706,10 @@ async function cargarRecibosContador(){
   constancias?.forEach(c=>{firmaPorRecibo[c.recibo_id]=c.fecha_firma;});
 
   if(!recibos?.length){document.getElementById('tabla-recibos-contador').innerHTML=`<div class="empty"><div class="empty-icon">📄</div><div class="empty-title">Sin recibos</div></div>`;return;}
-  let html=`<div class="card"><table><thead><tr><th>Empleado</th><th>Empresa</th><th>Período</th><th>Tipo</th><th>Neto</th><th>Estado</th><th>Firma</th><th></th></tr></thead><tbody>`;
+  let html=`<div class="card"><table><thead><tr><th><input type="checkbox" class="chk-todos" onchange="toggleSeleccionarTodos(this)" title="Seleccionar todos los firmados"></th><th>Empleado</th><th>Empresa</th><th>Período</th><th>Tipo</th><th>Neto</th><th>Estado</th><th>Firma</th><th></th></tr></thead><tbody>`;
   recibos.forEach(r=>{
     const badgeClass={borrador:'badge-borrador',publicado:'badge-publicado',revocado:'badge-revocado'}[r.estado]||'badge-borrador';
+    const firmadoOk=r.estado==='publicado'&&!!firmaPorRecibo[r.id];
     let firmaHtml='—';
     if(r.estado==='publicado'){
       if(firmaPorRecibo[r.id]){
@@ -704,6 +721,7 @@ async function cargarRecibosContador(){
       }
     }
     html+=`<tr>
+      <td>${firmadoOk?`<input type="checkbox" class="chk-recibo" data-id="${r.id}" ${seleccionados.has(r.id)?'checked':''} onchange="toggleSeleccionRecibo('${r.id}',this.checked)" title="Seleccionar para descarga combinada">`:''}</td>
       <td><strong>${r.empleados?.nombre||'—'}</strong><br><small style="color:var(--text3)">${fc(r.empleados?.cuil||'')}</small></td>
       <td>${r.empresas?.nombre||'—'}</td>
       <td>${parseMes(r.periodo)}</td>
@@ -719,6 +737,7 @@ async function cargarRecibosContador(){
   });
   html+=`</tbody></table></div>`;
   document.getElementById('tabla-recibos-contador').innerHTML=html;
+  actualizarBarraSeleccion();
 }
 
 // ─── IMPORTAR ARCA ───
@@ -834,9 +853,10 @@ async function cargarRecibosEmpleador(){
 
   if(!recibos?.length){document.getElementById('tabla-recibos-empleador').innerHTML=`<div class="empty"><div class="empty-icon">📄</div><div class="empty-title">Sin recibos todavía</div></div>`;return;}
 
-  let html=`<div class="card"><div class="card-title">Recibos del período</div><table><thead><tr><th>Empleado</th><th>Período</th><th>Tipo</th><th>Neto</th><th>Estado</th><th>Firma</th><th></th></tr></thead><tbody>`;
+  let html=`<div class="card"><div class="card-title">Recibos del período</div><table><thead><tr><th><input type="checkbox" class="chk-todos" onchange="toggleSeleccionarTodos(this)" title="Seleccionar todos los firmados"></th><th>Empleado</th><th>Período</th><th>Tipo</th><th>Neto</th><th>Estado</th><th>Firma</th><th></th></tr></thead><tbody>`;
   recibos.forEach(r=>{
     const firmado=firmadosIds.has(r.id);
+    const firmadoOk=r.estado==='publicado'&&firmado;
     const badgeClass={borrador:'badge-borrador',publicado:'badge-publicado',revocado:'badge-revocado'}[r.estado];
     let firmaHtml='—';
     if(r.estado==='publicado'){
@@ -850,6 +870,7 @@ async function cargarRecibosEmpleador(){
     }
     const accionHtml=`<button class="btn-sm btn-outline" style="margin-right:6px;" onclick="verRecibo('${r.id}')">Ver</button>${r.estado==='borrador'?`<button class="btn-sm btn-success" onclick="aprobarRecibo('${r.id}')">Aprobar</button>`:''}`;
     html+=`<tr>
+      <td>${firmadoOk?`<input type="checkbox" class="chk-recibo" data-id="${r.id}" ${seleccionados.has(r.id)?'checked':''} onchange="toggleSeleccionRecibo('${r.id}',this.checked)" title="Seleccionar para descarga combinada">`:''}</td>
       <td><strong>${r.empleados?.nombre||'—'}</strong></td>
       <td>${parseMes(r.periodo)}</td><td>${r.tipo}</td>
       <td>${mon(r.neto_redondeado||r.neto)}</td>
@@ -859,6 +880,7 @@ async function cargarRecibosEmpleador(){
   });
   html+=`</tbody></table></div>`;
   document.getElementById('tabla-recibos-empleador').innerHTML=html;
+  actualizarBarraSeleccion();
 }
 
 async function verRecibo(reciboId){
@@ -1085,16 +1107,19 @@ async function cargarRecibosEmpleado(){
 
   if(!recibos?.length){document.getElementById('lista-recibos-empleado').innerHTML=`<div class="empty"><div class="empty-icon">📭</div><div class="empty-title">Sin recibos disponibles</div><div class="empty-sub">Cuando tu empleador apruebe tus recibos van a aparecer acá.</div></div>`;return;}
 
-  let html='<div style="display:flex;flex-direction:column;gap:10px;">';
+  let html='<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;color:var(--text2);"><input type="checkbox" class="chk-todos" onchange="toggleSeleccionarTodos(this)" title="Seleccionar todos los firmados"> Seleccionar todos los firmados</div><div style="display:flex;flex-direction:column;gap:10px;">';
   recibos.forEach(r=>{
     const firmado=firmadosIds.has(r.id);
     html+=`
-    <div class="card" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-bottom:0;" onclick="verReciboEmpleado('${r.id}')">
-      <div>
-        <div style="font-size:14px;font-weight:600;color:var(--navy);">${parseMes(r.periodo)} · ${r.tipo}</div>
-        <div style="font-size:12px;color:var(--text2);margin-top:2px;">Neto: ${mon(r.neto_redondeado||r.neto)}</div>
+    <div class="card" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0;">
+      <div style="display:flex;align-items:center;gap:12px;cursor:pointer;" onclick="verReciboEmpleado('${r.id}')">
+        ${firmado?`<input type="checkbox" class="chk-recibo" data-id="${r.id}" ${seleccionados.has(r.id)?'checked':''} onclick="event.stopPropagation();" onchange="toggleSeleccionRecibo('${r.id}',this.checked)" title="Seleccionar para descarga combinada">`:'<span style="width:16px;"></span>'}
+        <div>
+          <div style="font-size:14px;font-weight:600;color:var(--navy);">${parseMes(r.periodo)} · ${r.tipo}</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:2px;">Neto: ${mon(r.neto_redondeado||r.neto)}</div>
+        </div>
       </div>
-      <div style="display:flex;align-items:center;gap:10px;">
+      <div style="display:flex;align-items:center;gap:10px;cursor:pointer;" onclick="verReciboEmpleado('${r.id}')">
         ${firmado?'<span class="badge badge-firmado">✅ Firmado</span>':'<span class="badge badge-pendiente">⏳ Pendiente de firma</span>'}
         <button class="btn-sm btn-outline">Ver recibo</button>
       </div>
@@ -1102,6 +1127,7 @@ async function cargarRecibosEmpleado(){
   });
   html+='</div>';
   document.getElementById('lista-recibos-empleado').innerHTML=html;
+  actualizarBarraSeleccion();
 }
 
 // Vista del recibo completo para el empleado, reutilizando el mismo diseño profesional
@@ -1135,6 +1161,83 @@ async function confirmarFirma(){
   await cargarRecibosEmpleado();
   // Generar y descargar el PDF del recibo recién firmado
   await generarPDFRecibo(reciboId,true);
+}
+
+// ─── SELECCIÓN MÚLTIPLE DE RECIBOS (solo publicados + firmados) ───
+function toggleSeleccionRecibo(reciboId,checked){
+  if(checked)seleccionados.add(reciboId);
+  else seleccionados.delete(reciboId);
+  actualizarBarraSeleccion();
+}
+
+function toggleSeleccionarTodos(masterCheckbox){
+  const checks=document.querySelectorAll('.chk-recibo');
+  checks.forEach(c=>{
+    c.checked=masterCheckbox.checked;
+    const id=c.getAttribute('data-id');
+    if(masterCheckbox.checked)seleccionados.add(id);
+    else seleccionados.delete(id);
+  });
+  actualizarBarraSeleccion();
+}
+
+function limpiarSeleccion(){
+  seleccionados.clear();
+  document.querySelectorAll('.chk-recibo').forEach(c=>c.checked=false);
+  document.querySelectorAll('.chk-todos').forEach(c=>c.checked=false);
+  actualizarBarraSeleccion();
+}
+
+function actualizarBarraSeleccion(){
+  const barra=document.getElementById('barra-seleccion');
+  const num=document.getElementById('barra-seleccion-num');
+  if(!barra||!num)return;
+  num.textContent=seleccionados.size;
+  barra.classList.toggle('visible',seleccionados.size>0);
+}
+
+async function generarPDFMultiple(){
+  const ids=[...seleccionados];
+  if(!ids.length)return;
+  const btn=document.querySelector('#barra-seleccion .btn-gold');
+  const textoOriginal=btn?btn.textContent:'';
+  if(btn){btn.disabled=true;btn.textContent='Generando...';}
+  try{
+    const{jsPDF}=window.jspdf;
+    const pdf=new jsPDF('p','mm','a4');
+    const pageWidth=pdf.internal.pageSize.getWidth();
+    const pageHeight=pdf.internal.pageSize.getHeight();
+    let primero=true;
+    for(const reciboId of ids){
+      await verRecibo(reciboId);
+      const contenedor=document.getElementById('modal-recibo-body');
+      if(!contenedor)continue;
+      await new Promise(r=>setTimeout(r,300));
+      const canvas=await html2canvas(contenedor,{scale:2,backgroundColor:'#ffffff',useCORS:true});
+      const imgData=canvas.toDataURL('image/png');
+      const imgWidth=pageWidth-20;
+      const imgHeight=(canvas.height*imgWidth)/canvas.width;
+      if(!primero)pdf.addPage();
+      primero=false;
+      let heightLeft=imgHeight;
+      let position=10;
+      pdf.addImage(imgData,'PNG',10,position,imgWidth,Math.min(imgHeight,pageHeight-20));
+      heightLeft-=(pageHeight-20);
+      while(heightLeft>0){
+        position=heightLeft-imgHeight+10;
+        pdf.addPage();
+        pdf.addImage(imgData,'PNG',10,position,imgWidth,imgHeight);
+        heightLeft-=pageHeight;
+      }
+    }
+    cerrarModal('modal-ver-recibo');
+    pdf.save(`recibos_${ids.length}_${Date.now()}.pdf`);
+  }catch(err){
+    console.error('Error generando PDF combinado:',err);
+    alert('No se pudo generar el PDF combinado. Probá de nuevo o descargá los recibos uno por uno.');
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent=textoOriginal;}
+  }
 }
 
 async function generarPDFRecibo(reciboId,cerrarAlTerminar,esVistaEmpleado){
