@@ -683,10 +683,24 @@ async function cargarRecibosContador(){
   if(empId)q=q.eq('empresa_id',empId);
   if(estado)q=q.eq('estado',estado);
   const{data:recibos}=await q;
+  const{data:constancias}=await sb.from('constancias').select('recibo_id,fecha_firma');
+  const firmaPorRecibo={};
+  constancias?.forEach(c=>{firmaPorRecibo[c.recibo_id]=c.fecha_firma;});
+
   if(!recibos?.length){document.getElementById('tabla-recibos-contador').innerHTML=`<div class="empty"><div class="empty-icon">📄</div><div class="empty-title">Sin recibos</div></div>`;return;}
-  let html=`<div class="card"><table><thead><tr><th>Empleado</th><th>Empresa</th><th>Período</th><th>Tipo</th><th>Neto</th><th>Estado</th><th></th></tr></thead><tbody>`;
+  let html=`<div class="card"><table><thead><tr><th>Empleado</th><th>Empresa</th><th>Período</th><th>Tipo</th><th>Neto</th><th>Estado</th><th>Firma</th><th></th></tr></thead><tbody>`;
   recibos.forEach(r=>{
     const badgeClass={borrador:'badge-borrador',publicado:'badge-publicado',revocado:'badge-revocado'}[r.estado]||'badge-borrador';
+    let firmaHtml='—';
+    if(r.estado==='publicado'){
+      if(firmaPorRecibo[r.id]){
+        const fechaF=new Date(firmaPorRecibo[r.id]);
+        const fechaFmt=fechaF.toLocaleDateString('es-AR')+' '+fechaF.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+        firmaHtml=`<div class="semaforo"><div class="dot dot-green"></div>Firmado</div><div style="font-size:10px;color:var(--text3);margin-top:2px;">${fechaFmt} hs</div>`;
+      } else {
+        firmaHtml=`<div class="semaforo"><div class="dot dot-yellow"></div>Pendiente</div>`;
+      }
+    }
     html+=`<tr>
       <td><strong>${r.empleados?.nombre||'—'}</strong><br><small style="color:var(--text3)">${fc(r.empleados?.cuil||'')}</small></td>
       <td>${r.empresas?.nombre||'—'}</td>
@@ -694,6 +708,7 @@ async function cargarRecibosContador(){
       <td>${r.tipo}</td>
       <td>${mon(r.neto_redondeado||r.neto)}</td>
       <td><span class="badge ${badgeClass}">${r.estado}</span></td>
+      <td>${firmaHtml}</td>
       <td style="white-space:nowrap;">
         <button class="btn-sm btn-outline" style="margin-right:5px;" onclick="verRecibo('${r.id}')">Ver</button>
         ${r.estado==='publicado'?`<button class="btn-sm btn-danger" onclick="iniciarRevocacion('${r.id}')">Revocar</button>`:''}
@@ -805,7 +820,9 @@ async function cargarRecibosEmpleador(){
 
   const borradores=recibos?.filter(r=>r.estado==='borrador')||[];
   const publicados=recibos?.filter(r=>r.estado==='publicado')||[];
-  const{data:constancias}=await sb.from('constancias').select('recibo_id');
+  const{data:constancias}=await sb.from('constancias').select('recibo_id,fecha_firma');
+  const firmaPorRecibo={};
+  constancias?.forEach(c=>{firmaPorRecibo[c.recibo_id]=c.fecha_firma;});
   const firmadosIds=new Set(constancias?.map(c=>c.recibo_id)||[]);
 
   document.getElementById('emp-st-total').textContent=recibos?.length||0;
@@ -819,7 +836,16 @@ async function cargarRecibosEmpleador(){
   recibos.forEach(r=>{
     const firmado=firmadosIds.has(r.id);
     const badgeClass={borrador:'badge-borrador',publicado:'badge-publicado',revocado:'badge-revocado'}[r.estado];
-    const firmaHtml=r.estado==='publicado'?(firmado?`<div class="semaforo"><div class="dot dot-green"></div>Firmado</div>`:`<div class="semaforo"><div class="dot dot-yellow"></div>Pendiente</div>`):'—';
+    let firmaHtml='—';
+    if(r.estado==='publicado'){
+      if(firmado){
+        const fechaF=new Date(firmaPorRecibo[r.id]);
+        const fechaFmt=fechaF.toLocaleDateString('es-AR')+' '+fechaF.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+        firmaHtml=`<div class="semaforo"><div class="dot dot-green"></div>Firmado</div><div style="font-size:10px;color:var(--text3);margin-top:2px;">${fechaFmt} hs</div>`;
+      } else {
+        firmaHtml=`<div class="semaforo"><div class="dot dot-yellow"></div>Pendiente</div>`;
+      }
+    }
     const accionHtml=`<button class="btn-sm btn-outline" style="margin-right:6px;" onclick="verRecibo('${r.id}')">Ver</button>${r.estado==='borrador'?`<button class="btn-sm btn-success" onclick="aprobarRecibo('${r.id}')">Aprobar</button>`:''}`;
     html+=`<tr>
       <td><strong>${r.empleados?.nombre||'—'}</strong></td>
@@ -1080,10 +1106,12 @@ async function cargarRecibosEmpleado(){
 async function verReciboEmpleado(reciboId){
   await verRecibo(reciboId);
   // Sobrescribir las acciones del modal para mostrar Confirmar recepción en vez de Aprobar
-  const{data:constancia}=await sb.from('constancias').select('id').eq('recibo_id',reciboId).eq('empleado_id',currentUser.empleado_id).maybeSingle();
+  const{data:constancia}=await sb.from('constancias').select('id,fecha_firma').eq('recibo_id',reciboId).eq('empleado_id',currentUser.empleado_id).maybeSingle();
   const actions=document.getElementById('modal-recibo-actions');
   if(constancia){
-    actions.innerHTML=`<div class="constancia-box" style="flex:1;"><div class="constancia-icon">✅</div><div class="constancia-title">Recibo confirmado</div><div class="constancia-detail">Ya firmaste este recibo digitalmente</div></div>`;
+    const fechaF=new Date(constancia.fecha_firma);
+    const fechaFmt=fechaF.toLocaleDateString('es-AR')+' a las '+fechaF.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})+' hs';
+    actions.innerHTML=`<div class="constancia-box" style="flex:1;"><div class="constancia-icon">✅</div><div class="constancia-title">Recibo confirmado</div><div class="constancia-detail">Firmado digitalmente el ${fechaFmt}</div></div>`;
   } else {
     actions.innerHTML=`<button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-ver-recibo')">Cerrar</button><button class="btn-sm" style="flex:1;padding:10px;background:var(--gold);color:var(--navy);font-weight:600;border:none;border-radius:var(--radius);cursor:pointer;" onclick="cerrarModal('modal-ver-recibo');iniciarFirma('${reciboId}')">✍️ Confirmar recepción</button>`;
   }
