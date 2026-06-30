@@ -208,8 +208,20 @@ tr:last-child td{border-bottom:none;}
       <div class="login-title">Creá tu contraseña</div>
       <div class="login-sub">Es tu primer acceso. Elegí una contraseña segura y dejá tu email para recibir notificaciones.</div>
       <div id="primer-err" class="err" style="display:none;"></div>
-      <div class="field"><label>Nueva contraseña</label><input type="password" id="new-pass" placeholder="Mínimo 8 caracteres"></div>
-      <div class="field"><label>Confirmá la contraseña</label><input type="password" id="new-pass2" placeholder="Repetí la contraseña"></div>
+      <div class="field">
+        <label>Nueva contraseña</label>
+        <div style="position:relative;">
+          <input type="password" id="new-pass" placeholder="Mínimo 8 caracteres" style="width:100%;padding-right:44px;">
+          <button type="button" onclick="togglePass('new-pass',this)" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3);">👁</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Confirmá la contraseña</label>
+        <div style="position:relative;">
+          <input type="password" id="new-pass2" placeholder="Repetí la contraseña" style="width:100%;padding-right:44px;">
+          <button type="button" onclick="togglePass('new-pass2',this)" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3);">👁</button>
+        </div>
+      </div>
       <div class="field"><label>Tu email</label><input type="email" id="new-email" placeholder="ejemplo@gmail.com"></div>
       <button class="btn btn-gold" onclick="doPrimerAcceso()">Confirmar y continuar</button>
     </div>
@@ -1045,43 +1057,36 @@ async function cargarRecibosEmpleado(){
 
   if(!recibos?.length){document.getElementById('lista-recibos-empleado').innerHTML=`<div class="empty"><div class="empty-icon">📭</div><div class="empty-title">Sin recibos disponibles</div><div class="empty-sub">Cuando tu empleador apruebe tus recibos van a aparecer acá.</div></div>`;return;}
 
-  let html='';
+  let html='<div style="display:flex;flex-direction:column;gap:10px;">';
   recibos.forEach(r=>{
     const firmado=firmadosIds.has(r.id);
-    const datos=r.datos_json||{};
-    const conceptos=[];
-    const SKIP=['Período','Tipo','Fecha','Fecha Alta','Fecha Baja','Modo Contrato','Categoria','CUIL','Legajo','Empleado','Haberes','No Remun.','Descuentos','Retenciones','Neto','Redondeado','Rem 4 y 8','Rem 9','Cont Tar Dif','Imp A Detraer','Cont Adic OS','% Adic SS'];
-    Object.entries(datos).forEach(([k,v])=>{
-      if(SKIP.includes(k)||!k.match(/^\d+$/))return;
-      const val=pc(v);if(!val)return;
-      const info=conceptosMap[k]||{nombre:'Concepto '+k,tipo:'rem'};
-      conceptos.push({cod:k,nombre:info.nombre,tipo:info.tipo,importe:val});
-    });
-
-    html+=`<div class="recibo-preview">
-      <div class="rp-head">
-        <div><div class="rp-head-title">${parseMes(r.periodo)} · ${r.tipo}</div><div style="font-size:11px;opacity:.7;margin-top:2px;">${empData?.nombre||''}</div></div>
-        <div class="rp-head-badge">${firmado?'✅ Firmado':'⏳ Pendiente de firma'}</div>
+    html+=`
+    <div class="card" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-bottom:0;" onclick="verReciboEmpleado('${r.id}')">
+      <div>
+        <div style="font-size:14px;font-weight:600;color:var(--navy);">${parseMes(r.periodo)} · ${r.tipo}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:2px;">Neto: ${mon(r.neto_redondeado||r.neto)}</div>
       </div>
-      <div class="rp-body">
-        <div class="rp-grid">
-          <div class="rp-field"><div class="rp-field-lbl">CUIL</div><div class="rp-field-val">${fc(empData?.cuil||'')}</div></div>
-          <div class="rp-field"><div class="rp-field-lbl">Categoría</div><div class="rp-field-val">${empData?.categoria||'—'}</div></div>
-          <div class="rp-field"><div class="rp-field-lbl">Ingreso</div><div class="rp-field-val">${empData?.fecha_ingreso||'—'}</div></div>
-          <div class="rp-field"><div class="rp-field-lbl">Fecha pago</div><div class="rp-field-val">${r.fecha_pago||'—'}</div></div>
-        </div>
-        <table class="rp-table">
-          <thead><tr><th style="text-align:left;">Concepto</th><th>Monto</th></tr></thead>
-          <tbody>
-            ${conceptos.map(c=>`<tr><td><span style="color:var(--text3);font-size:11px;margin-right:4px;">${c.cod}.</span>${c.nombre}</td><td style="color:${c.tipo==='ded'?'var(--danger)':'var(--text)'};">${c.tipo==='ded'?'- ':''}${mon(c.importe)}</td></tr>`).join('')}
-          </tbody>
-        </table>
+      <div style="display:flex;align-items:center;gap:10px;">
+        ${firmado?'<span class="badge badge-firmado">✅ Firmado</span>':'<span class="badge badge-pendiente">⏳ Pendiente de firma</span>'}
+        <button class="btn-sm btn-outline">Ver recibo</button>
       </div>
-      <div class="rp-neto"><span>NETO A COBRAR</span><span>${mon(r.neto_redondeado||r.neto)}</span></div>
-      ${!firmado?`<div style="padding:16px;text-align:center;"><button class="btn btn-gold" style="width:auto;padding:10px 28px;" onclick="iniciarFirma('${r.id}')">✍️ Confirmar recepción</button></div>`:`<div class="constancia-box" style="margin:16px;"><div class="constancia-icon">✅</div><div class="constancia-title">Recibo confirmado</div><div class="constancia-detail">Firmado digitalmente con tu usuario</div></div>`}
     </div>`;
   });
+  html+='</div>';
   document.getElementById('lista-recibos-empleado').innerHTML=html;
+}
+
+// Vista del recibo completo para el empleado, reutilizando el mismo diseño profesional
+async function verReciboEmpleado(reciboId){
+  await verRecibo(reciboId);
+  // Sobrescribir las acciones del modal para mostrar Confirmar recepción en vez de Aprobar
+  const{data:constancia}=await sb.from('constancias').select('id').eq('recibo_id',reciboId).eq('empleado_id',currentUser.empleado_id).maybeSingle();
+  const actions=document.getElementById('modal-recibo-actions');
+  if(constancia){
+    actions.innerHTML=`<div class="constancia-box" style="flex:1;"><div class="constancia-icon">✅</div><div class="constancia-title">Recibo confirmado</div><div class="constancia-detail">Ya firmaste este recibo digitalmente</div></div>`;
+  } else {
+    actions.innerHTML=`<button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-ver-recibo')">Cerrar</button><button class="btn-sm" style="flex:1;padding:10px;background:var(--gold);color:var(--navy);font-weight:600;border:none;border-radius:var(--radius);cursor:pointer;" onclick="cerrarModal('modal-ver-recibo');iniciarFirma('${reciboId}')">✍️ Confirmar recepción</button>`;
+  }
 }
 
 let reciboAFirmar=null;
