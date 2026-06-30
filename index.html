@@ -1108,7 +1108,8 @@ async function cargarRecibosEmpleado(){
 async function verReciboEmpleado(reciboId){
   await verRecibo(reciboId);
   // Sobrescribir las acciones del modal para mostrar Confirmar recepción en vez de Aprobar
-  const{data:constancia}=await sb.from('constancias').select('id,fecha_firma').eq('recibo_id',reciboId).eq('empleado_id',currentUser.empleado_id).maybeSingle();
+  const{data:constancia,error:errConst}=await sb.from('constancias').select('id,fecha_firma').eq('recibo_id',reciboId).eq('empleado_id',currentUser.empleado_id).order('fecha_firma',{ascending:false}).limit(1).maybeSingle();
+  if(errConst) console.error('Error consultando constancia:',errConst);
   const actions=document.getElementById('modal-recibo-actions');
   if(constancia){
     const fechaF=new Date(constancia.fecha_firma);
