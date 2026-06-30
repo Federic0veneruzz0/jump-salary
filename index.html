@@ -212,6 +212,7 @@ tr:last-child td{border-bottom:none;}
       </div>
       <button class="btn btn-primary" onclick="doLogin()">Ingresar</button>
       <div style="margin-top:12px;text-align:center;font-size:12px;color:var(--text3);">¿Primera vez? Ingresá tu CUIL y DNI como contraseña.</div>
+      <div style="margin-top:8px;text-align:center;font-size:12px;"><a href="#" onclick="event.preventDefault();mostrarRecuperarClave();" style="color:var(--accent);text-decoration:none;">¿Olvidaste tu contraseña?</a></div>
     </div>
     <div id="login-step-primer" style="display:none;">
       <div class="login-title">Creá tu contraseña</div>
@@ -233,6 +234,35 @@ tr:last-child td{border-bottom:none;}
       </div>
       <div class="field"><label>Tu email</label><input type="email" id="new-email" placeholder="ejemplo@gmail.com"></div>
       <button class="btn btn-gold" onclick="doPrimerAcceso()">Confirmar y continuar</button>
+    </div>
+    <div id="login-step-recuperar" style="display:none;">
+      <div class="login-title">Recuperar contraseña</div>
+      <div class="login-sub">Ingresá tu CUIT/CUIL y te enviamos un link a tu email para elegir una contraseña nueva.</div>
+      <div id="recuperar-err" class="err" style="display:none;"></div>
+      <div id="recuperar-ok" class="ok" style="display:none;"></div>
+      <div class="field"><label>CUIT / CUIL</label><input type="text" id="recuperar-cuit" placeholder="20-12345678-9" maxlength="13" onkeydown="if(event.key==='Enter')enviarRecuperacion()"></div>
+      <button class="btn btn-primary" onclick="enviarRecuperacion()">Enviar link de recuperación</button>
+      <div style="margin-top:12px;text-align:center;font-size:12px;"><a href="#" onclick="event.preventDefault();volverALogin();" style="color:var(--accent);text-decoration:none;">Volver al login</a></div>
+    </div>
+    <div id="login-step-nueva-clave" style="display:none;">
+      <div class="login-title">Elegí tu nueva contraseña</div>
+      <div class="login-sub">Llegaste desde el link de recuperación. Ingresá tu nueva contraseña.</div>
+      <div id="nueva-clave-err" class="err" style="display:none;"></div>
+      <div class="field">
+        <label>Nueva contraseña</label>
+        <div style="position:relative;">
+          <input type="password" id="nueva-clave-pass" placeholder="Mínimo 8 caracteres" style="width:100%;padding-right:44px;">
+          <button type="button" onclick="togglePass('nueva-clave-pass',this)" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3);">👁</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Confirmá la contraseña</label>
+        <div style="position:relative;">
+          <input type="password" id="nueva-clave-pass2" placeholder="Repetí la contraseña" style="width:100%;padding-right:44px;">
+          <button type="button" onclick="togglePass('nueva-clave-pass2',this)" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3);">👁</button>
+        </div>
+      </div>
+      <button class="btn btn-gold" onclick="guardarNuevaClave()">Guardar contraseña</button>
     </div>
   </div>
 </div>
@@ -554,6 +584,59 @@ async function doPrimerAcceso(){
   // Notificar que se enviará email de verificación
   alert('¡Cuenta creada! Te enviamos un email de verificación a '+email+'. Verificá tu casilla y volvé a ingresar.');
   location.reload();
+}
+
+// ─── RECUPERAR CONTRASEÑA ───
+function mostrarRecuperarClave(){
+  document.getElementById('login-step-1').style.display='none';
+  document.getElementById('login-step-recuperar').style.display='block';
+  document.getElementById('recuperar-err').style.display='none';
+  document.getElementById('recuperar-ok').style.display='none';
+}
+
+function volverALogin(){
+  document.getElementById('login-step-recuperar').style.display='none';
+  document.getElementById('login-step-nueva-clave').style.display='none';
+  document.getElementById('login-step-1').style.display='block';
+}
+
+async function enviarRecuperacion(){
+  const errBox=document.getElementById('recuperar-err');
+  const okBox=document.getElementById('recuperar-ok');
+  errBox.style.display='none';okBox.style.display='none';
+
+  const cuit=nc(document.getElementById('recuperar-cuit').value);
+  if(!cuit){errBox.textContent='Ingresá tu CUIT/CUIL.';errBox.style.display='block';return;}
+
+  const{data:usuario}=await sb.from('usuarios').select('email,primer_acceso').eq('cuit_cuil',cuit).maybeSingle();
+  if(!usuario){errBox.textContent='CUIT/CUIL no encontrado en el sistema.';errBox.style.display='block';return;}
+  if(usuario.primer_acceso||!usuario.email){
+    errBox.textContent='Todavía no creaste tu contraseña. Ingresá con tu CUIL y tu DNI como contraseña para crearla.';
+    errBox.style.display='block';
+    return;
+  }
+
+  const{error}=await sb.auth.resetPasswordForEmail(usuario.email,{redirectTo:window.location.origin});
+  if(error){errBox.textContent='No pudimos enviar el email. Probá de nuevo en unos minutos.';errBox.style.display='block';return;}
+
+  okBox.textContent=`Te enviamos un link a ${usuario.email}. Abrilo y vas a poder elegir una contraseña nueva.`;
+  okBox.style.display='block';
+}
+
+async function guardarNuevaClave(){
+  const errBox=document.getElementById('nueva-clave-err');
+  errBox.style.display='none';
+  const pass=document.getElementById('nueva-clave-pass').value;
+  const pass2=document.getElementById('nueva-clave-pass2').value;
+  if(pass.length<8){errBox.textContent='La contraseña debe tener al menos 8 caracteres.';errBox.style.display='block';return;}
+  if(pass!==pass2){errBox.textContent='Las contraseñas no coinciden.';errBox.style.display='block';return;}
+
+  const{error}=await sb.auth.updateUser({password:pass});
+  if(error){errBox.textContent='No pudimos guardar la contraseña: '+error.message;errBox.style.display='block';return;}
+
+  await sb.auth.signOut();
+  alert('¡Listo! Tu contraseña se actualizó. Ingresá de nuevo con tu CUIT/CUIL y la nueva contraseña.');
+  window.location.href=window.location.origin+window.location.pathname;
 }
 
 async function cargarContribuciones(){
@@ -1465,6 +1548,12 @@ function verEmpresa(empId){
 
 // ─── INIT ───
 window.addEventListener('DOMContentLoaded',async()=>{
+  // Si venimos del link de recuperación de contraseña, mostrar pantalla para elegir clave nueva
+  if(window.location.hash.includes('type=recovery')){
+    document.getElementById('login-step-1').style.display='none';
+    document.getElementById('login-step-nueva-clave').style.display='block';
+    return;
+  }
   const{data:{session}}=await sb.auth.getSession();
   if(session){
     const{data:usuario}=await sb.from('usuarios').select('*').eq('auth_id',session.user.id).single();
