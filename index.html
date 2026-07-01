@@ -279,6 +279,7 @@ tr:last-child td{border-bottom:none;}
         <span class="topbar-user" id="topbar-user"></span>
         <span class="topbar-rol" id="topbar-rol"></span>
       </div>
+      <button id="btn-volver-admin" class="btn-logout" style="display:none;background:var(--gold);color:#fff;margin-right:8px;" onclick="volverAdminPlataforma()">← Volver al admin</button>
       <button class="btn-logout" onclick="doLogout()">Salir</button>
     </div>
   </div>
@@ -811,6 +812,51 @@ function navTo(pageId,clickedEl){
   if(pageId==='page-dashboard') cargarDashboardContador();
 }
 
+let adminOriginal = null; // guarda el estado original del admin para poder volver
+
+async function impersonarEstudio(estudioId, estudioNombre){
+  // Guardar estado original del admin
+  adminOriginal = {...currentUser};
+
+  // Simular un usuario contador de ese estudio
+  currentUser = {
+    ...currentUser,
+    tipo: 'contador',
+    estudio_id: estudioId,
+    es_admin: false,
+    _impersonando: true,
+    _estudioNombre: estudioNombre
+  };
+
+  // Mostrar botón de volver
+  document.getElementById('btn-volver-admin').style.display='inline-block';
+
+  // Actualizar topbar
+  document.getElementById('topbar-rol').textContent='Contador';
+  document.getElementById('topbar-empresa').textContent=` — ${estudioNombre}`;
+
+  // Limpiar páginas activas y cargar panel contador
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  await initContador();
+}
+
+async function volverAdminPlataforma(){
+  if(!adminOriginal) return;
+
+  // Restaurar usuario original
+  currentUser = {...adminOriginal};
+  adminOriginal = null;
+
+  // Ocultar botón de volver y limpiar topbar
+  document.getElementById('btn-volver-admin').style.display='none';
+  document.getElementById('topbar-empresa').textContent='';
+  document.getElementById('topbar-rol').textContent='Admin Plataforma';
+
+  // Volver al panel admin
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  await initAdminPlataforma();
+}
+
 // ─── ADMIN PLATAFORMA ───
 async function initAdminPlataforma(){
   buildSidebar([
@@ -832,17 +878,19 @@ async function cargarEstudios(){
   let html=`<div class="card"><table><thead><tr><th>Estudio</th><th>CUIT</th><th>Plan</th><th>Estado</th><th>Sin cargo</th><th></th></tr></thead><tbody>`;
   for(const e of estudios){
     const{count:empCount}=await sb.from('empresas').select('id',{count:'exact'}).eq('estudio_id',e.id);
+  const planesLabel={basico:'Básico',pro:'Pro',enterprise:'Empresa'};
     const estadoBadge=e.activo?'<span class="badge badge-publicado">Activo</span>':'<span class="badge badge-revocado">Inactivo</span>';
     const sinCargo=e.sin_cargo?'✅ Sí':'—';
     html+=`<tr>
       <td><strong>${e.nombre}</strong><br><small style="color:var(--text3)">${e.email_admin||''}</small></td>
       <td>${fc(e.cuit||'')}</td>
-      <td><span class="badge badge-borrador">${e.plan||'basico'}</span></td>
+      <td><span class="badge badge-borrador">${planesLabel[e.plan]||e.plan||'Básico'}</span></td>
       <td>${estadoBadge}</td>
       <td>${sinCargo}</td>
       <td style="white-space:nowrap;">
         <span style="font-size:12px;color:var(--text3);">${empCount||0} empresa(s)</span>
-        <button class="btn-sm btn-outline" style="margin-left:8px;" onclick="toggleEstudio(${e.id},${e.activo})">${e.activo?'Desactivar':'Activar'}</button>
+        <button class="btn-sm btn-gold" style="margin-left:8px;" onclick="impersonarEstudio(${e.id},'${e.nombre}')">Entrar</button>
+        <button class="btn-sm btn-outline" style="margin-left:4px;" onclick="toggleEstudio(${e.id},${e.activo})">${e.activo?'Desactivar':'Activar'}</button>
       </td>
     </tr>`;
   }
