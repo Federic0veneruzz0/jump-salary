@@ -211,7 +211,7 @@ tr:last-child td{border-bottom:none;}
         </div>
       </div>
       <button class="btn btn-primary" onclick="doLogin()">Ingresar</button>
-      <div style="margin-top:12px;text-align:center;font-size:12px;color:var(--text3);">¿Primera vez? Ingresá tu CUIL y DNI como contraseña.</div>
+      <div style="margin-top:12px;text-align:center;font-size:12px;color:var(--text3);">¿Primera vez? Tu contraseña inicial son los 8 números del medio de tu CUIT/CUIL (tu DNI, si sos empleado).</div>
       <div style="margin-top:8px;text-align:center;font-size:12px;"><a href="#" onclick="event.preventDefault();mostrarRecuperarClave();" style="color:var(--accent);text-decoration:none;">¿Olvidaste tu contraseña?</a></div>
     </div>
     <div id="login-step-primer" style="display:none;">
@@ -539,7 +539,7 @@ async function doLogin(){
   // Si es primer acceso, la clave es el DNI (8 dígitos del medio del CUIL)
   const dniEsperado=cuit.slice(2,10);
   if(usuario.primer_acceso){
-    if(pass!==dniEsperado){showErr('login-err','Contraseña incorrecta. En tu primer acceso usá tu DNI como contraseña.');return;}
+    if(pass!==dniEsperado){showErr('login-err','Contraseña incorrecta. En tu primer acceso, la contraseña son los 8 números del medio de tu CUIT/CUIL (tu DNI, si sos empleado).');return;}
     currentUser=usuario;
     document.getElementById('login-step-1').style.display='none';
     document.getElementById('login-step-primer').style.display='block';
@@ -611,7 +611,7 @@ async function enviarRecuperacion(){
   const{data:usuario}=await sb.from('usuarios').select('email,primer_acceso').eq('cuit_cuil',cuit).maybeSingle();
   if(!usuario){errBox.textContent='CUIT/CUIL no encontrado en el sistema.';errBox.style.display='block';return;}
   if(usuario.primer_acceso||!usuario.email){
-    errBox.textContent='Todavía no creaste tu contraseña. Ingresá con tu CUIL y tu DNI como contraseña para crearla.';
+    errBox.textContent='Todavía no creaste tu contraseña. Ingresá con tu CUIT/CUIL y los 8 números del medio como contraseña (tu DNI, si sos empleado) para crearla.';
     errBox.style.display='block';
     return;
   }
