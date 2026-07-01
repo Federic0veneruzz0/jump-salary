@@ -216,7 +216,7 @@ tr:last-child td{border-bottom:none;}
     </div>
     <div id="login-step-primer" style="display:none;">
       <div class="login-title">Creá tu contraseña</div>
-      <div class="login-sub">Es tu primer acceso. Elegí una contraseña segura y dejá tu email para recibir notificaciones.</div>
+      <div class="login-sub">Elegí una contraseña para los próximos ingresos. El email es opcional pero te lo recomendamos para poder recuperar tu contraseña si la olvidás.</div>
       <div id="primer-err" class="err" style="display:none;"></div>
       <div class="field">
         <label>Nueva contraseña</label>
@@ -232,7 +232,7 @@ tr:last-child td{border-bottom:none;}
           <button type="button" onclick="togglePass('new-pass2',this)" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3);">👁</button>
         </div>
       </div>
-      <div class="field"><label>Tu email</label><input type="email" id="new-email" placeholder="ejemplo@gmail.com"></div>
+      <div class="field"><label>Tu email <span style="font-weight:400;color:var(--text3);">(opcional, para recuperar contraseña)</span></label><input type="email" id="new-email" placeholder="ejemplo@gmail.com"></div>
       <button class="btn btn-gold" onclick="doPrimerAcceso()">Confirmar y continuar</button>
     </div>
     <div id="login-step-recuperar" style="display:none;">
@@ -285,6 +285,26 @@ tr:last-child td{border-bottom:none;}
   <div class="main">
     <div class="sidebar" id="sidebar"></div>
     <div class="content">
+
+      <!-- PANEL ADMIN PLATAFORMA -->
+      <div class="page" id="page-admin-estudios">
+        <div class="page-title">Estudios contables</div>
+        <div class="page-sub">Todos los estudios registrados en la plataforma</div>
+        <div style="display:flex;justify-content:flex-end;margin-bottom:16px;">
+          <button class="btn-sm btn-gold" onclick="abrirModal('modal-nuevo-estudio')">+ Nuevo estudio</button>
+        </div>
+        <div id="tabla-admin-estudios"><div class="loading">Cargando...</div></div>
+      </div>
+      <div class="page" id="page-admin-metricas">
+        <div class="page-title">Métricas globales</div>
+        <div class="page-sub">Resumen de toda la plataforma</div>
+        <div class="stats">
+          <div class="stat accent"><div class="stat-val" id="adm-st-estudios">—</div><div class="stat-lbl">Estudios activos</div></div>
+          <div class="stat gold"><div class="stat-val" id="adm-st-empresas">—</div><div class="stat-lbl">Empresas totales</div></div>
+          <div class="stat success"><div class="stat-val" id="adm-st-empleados">—</div><div class="stat-lbl">Empleados totales</div></div>
+          <div class="stat danger"><div class="stat-val" id="adm-st-recibos">—</div><div class="stat-lbl">Recibos emitidos</div></div>
+        </div>
+      </div>
 
       <!-- PANEL CONTADOR -->
       <div class="page" id="page-dashboard">
@@ -473,6 +493,29 @@ tr:last-child td{border-bottom:none;}
   </div>
 </div>
 
+<!-- MODAL NUEVO ESTUDIO -->
+<div class="modal-overlay" id="modal-nuevo-estudio">
+  <div class="modal">
+    <div class="modal-title">Nuevo estudio contable</div>
+    <div class="modal-sub">El contador del estudio recibirá acceso como administrador de su propio panel.</div>
+    <div id="ne-err" class="err" style="display:none;"></div>
+    <div class="field"><label>Nombre del estudio</label><input id="ne-nombre" type="text" placeholder="Ej: García & Asociados"></div>
+    <div class="field"><label>CUIT del estudio</label><input id="ne-cuit" type="text" placeholder="Ej: 20123456789" maxlength="13"></div>
+    <div class="field"><label>Nombre del contador responsable</label><input id="ne-nombre-contador" type="text" placeholder="Ej: Juan García"></div>
+    <div class="field"><label>Plan</label>
+      <select id="ne-plan">
+        <option value="basico">Básico</option>
+        <option value="pro">Pro</option>
+        <option value="enterprise">Enterprise</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-nuevo-estudio')">Cancelar</button>
+      <button class="btn-sm btn-success" style="flex:1;" onclick="crearEstudio()">Crear estudio</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL NUEVO CLIENTE -->
 <div class="modal-overlay" id="modal-nuevo-cliente">
   <div class="modal">
@@ -568,22 +611,40 @@ async function doPrimerAcceso(){
   hideErr('primer-err');
   const pass=document.getElementById('new-pass').value;
   const pass2=document.getElementById('new-pass2').value;
-  const email=document.getElementById('new-email').value;
+  const emailInput=document.getElementById('new-email').value.trim();
   if(pass.length<8){showErr('primer-err','La contraseña debe tener al menos 8 caracteres.');return;}
   if(pass!==pass2){showErr('primer-err','Las contraseñas no coinciden.');return;}
-  if(!email.includes('@')){showErr('primer-err','Email inválido.');return;}
+  if(emailInput&&!emailInput.includes('@')){showErr('primer-err','Email inválido.');return;}
+
+  // Si no puso email, usamos uno interno basado en el CUIT para Supabase Auth
+  const email=emailInput||`${currentUser.cuit_cuil}@internal.jumpsalary.com.ar`;
+  const emailEsReal=!!emailInput;
 
   // Crear usuario en Supabase Auth
   const{data,error}=await sb.auth.signUp({email,password:pass});
   if(error){showErr('primer-err','Error al crear cuenta: '+error.message);return;}
 
-  // Actualizar en nuestra tabla
-  await sb.from('usuarios').update({email,primer_acceso:false,auth_id:data.user?.id}).eq('id',currentUser.id);
-  currentUser={...currentUser,email,primer_acceso:false};
+  // Actualizar tabla usuarios
+  await sb.from('usuarios').update({
+    email:emailEsReal?email:null,
+    primer_acceso:false,
+    auth_id:data.user?.id
+  }).eq('id',currentUser.id);
 
-  // Notificar que se enviará email de verificación
-  alert('¡Cuenta creada! Te enviamos un email de verificación a '+email+'. Verificá tu casilla y volvé a ingresar.');
-  location.reload();
+  // Ingresar directamente sin esperar verificación de email
+  const{error:loginErr}=await sb.auth.signInWithPassword({email,password:pass});
+  if(loginErr){
+    // Si Supabase requiere verificación, igual dejamos entrar vía nuestra tabla
+    currentUser={...currentUser,email:emailEsReal?email:null,primer_acceso:false};
+    iniciarApp();
+    return;
+  }
+
+  currentUser={...currentUser,email:emailEsReal?email:null,primer_acceso:false};
+  if(emailEsReal){
+    alert('¡Listo! Ya podés usar la app. Te recomendamos verificar tu email ('+email+') para poder recuperar tu contraseña si la olvidás.');
+  }
+  iniciarApp();
 }
 
 // ─── RECUPERAR CONTRASEÑA ───
@@ -699,17 +760,20 @@ async function iniciarApp(){
   document.getElementById('app').classList.add('visible');
   document.getElementById('topbar-user').textContent=currentUser.nombre;
 
-  // Verificar si tiene doble rol (empleador + empleado en misma empresa)
-  // El empleado_id ya viene seteado en el UPDATE que hicimos en Supabase
   if(currentUser.tipo==='empleador' && currentUser.empleado_id){
     currentUser.dobleRol=true;
   }
 
+  // Detectar admin de plataforma
+  const esAdminPlataforma=currentUser.es_admin===true||currentUser.es_admin==='true';
+
   const roles={contador:'Contador',empleador:'Empleador',empleado:'Empleado'};
-  const rolLabel=currentUser.dobleRol?'Empleador + Empleado':roles[currentUser.tipo]||currentUser.tipo;
+  let rolLabel=currentUser.dobleRol?'Empleador + Empleado':roles[currentUser.tipo]||currentUser.tipo;
+  if(esAdminPlataforma) rolLabel='Admin Plataforma';
   document.getElementById('topbar-rol').textContent=rolLabel;
 
-  if(currentUser.tipo==='contador') await initContador();
+  if(esAdminPlataforma) await initAdminPlataforma();
+  else if(currentUser.tipo==='contador') await initContador();
   else if(currentUser.tipo==='empleador') await initEmpleador();
   else await initEmpleado();
 }
@@ -741,8 +805,111 @@ function navTo(pageId,clickedEl){
   document.querySelectorAll('.sidebar-item').forEach(i=>i.classList.remove('active'));
   if(clickedEl) clickedEl.classList.add('active');
   // Cargar datos según la página
+  if(pageId==='page-admin-estudios') cargarEstudios();
+  if(pageId==='page-admin-metricas') cargarMetricasAdmin();
   if(pageId==='page-recibos-contador') cargarRecibosContador();
   if(pageId==='page-dashboard') cargarDashboardContador();
+}
+
+// ─── ADMIN PLATAFORMA ───
+async function initAdminPlataforma(){
+  buildSidebar([
+    {section:'Plataforma'},
+    {icon:'🏛️',label:'Estudios',page:'page-admin-estudios',active:true},
+    {icon:'📊',label:'Métricas',page:'page-admin-metricas'},
+  ]);
+  document.getElementById('page-admin-estudios').classList.add('active');
+  await cargarEstudios();
+  await cargarMetricasAdmin();
+}
+
+async function cargarEstudios(){
+  const{data:estudios}=await sb.from('estudios').select('*').order('id');
+  if(!estudios?.length){
+    document.getElementById('tabla-admin-estudios').innerHTML=`<div class="empty"><div class="empty-icon">🏛️</div><div class="empty-title">Sin estudios registrados</div><div class="empty-sub">Hacé clic en "+ Nuevo estudio" para agregar el primero.</div></div>`;
+    return;
+  }
+  let html=`<div class="card"><table><thead><tr><th>Estudio</th><th>CUIT</th><th>Plan</th><th>Estado</th><th>Sin cargo</th><th></th></tr></thead><tbody>`;
+  for(const e of estudios){
+    const{count:empCount}=await sb.from('empresas').select('id',{count:'exact'}).eq('estudio_id',e.id);
+    const estadoBadge=e.activo?'<span class="badge badge-publicado">Activo</span>':'<span class="badge badge-revocado">Inactivo</span>';
+    const sinCargo=e.sin_cargo?'✅ Sí':'—';
+    html+=`<tr>
+      <td><strong>${e.nombre}</strong><br><small style="color:var(--text3)">${e.email_admin||''}</small></td>
+      <td>${fc(e.cuit||'')}</td>
+      <td><span class="badge badge-borrador">${e.plan||'basico'}</span></td>
+      <td>${estadoBadge}</td>
+      <td>${sinCargo}</td>
+      <td style="white-space:nowrap;">
+        <span style="font-size:12px;color:var(--text3);">${empCount||0} empresa(s)</span>
+        <button class="btn-sm btn-outline" style="margin-left:8px;" onclick="toggleEstudio(${e.id},${e.activo})">${e.activo?'Desactivar':'Activar'}</button>
+      </td>
+    </tr>`;
+  }
+  html+=`</tbody></table></div>`;
+  document.getElementById('tabla-admin-estudios').innerHTML=html;
+}
+
+async function cargarMetricasAdmin(){
+  const{count:estudiosCount}=await sb.from('estudios').select('id',{count:'exact'}).eq('activo',true);
+  const{count:empresasCount}=await sb.from('empresas').select('id',{count:'exact'}).eq('activa',true);
+  const{count:empleadosCount}=await sb.from('empleados').select('id',{count:'exact'}).eq('activo',true);
+  const{count:recibosCount}=await sb.from('recibos').select('id',{count:'exact'});
+  document.getElementById('adm-st-estudios').textContent=estudiosCount||0;
+  document.getElementById('adm-st-empresas').textContent=empresasCount||0;
+  document.getElementById('adm-st-empleados').textContent=empleadosCount||0;
+  document.getElementById('adm-st-recibos').textContent=recibosCount||0;
+}
+
+async function toggleEstudio(estudioId,activo){
+  await sb.from('estudios').update({activo:!activo}).eq('id',estudioId);
+  await cargarEstudios();
+}
+
+async function crearEstudio(){
+  const errBox=document.getElementById('ne-err');
+  errBox.style.display='none';
+  const nombre=document.getElementById('ne-nombre').value.trim();
+  const cuit=nc(document.getElementById('ne-cuit').value);
+  const nombreContador=document.getElementById('ne-nombre-contador').value.trim();
+  const plan=document.getElementById('ne-plan').value;
+
+  if(!nombre||!cuit||!nombreContador){errBox.textContent='Completá todos los campos.';errBox.style.display='block';return;}
+  if(cuit.length!==11){errBox.textContent='El CUIT debe tener 11 dígitos.';errBox.style.display='block';return;}
+
+  const{data:existe}=await sb.from('usuarios').select('id').eq('cuit_cuil',cuit).maybeSingle();
+  if(existe){errBox.textContent='Ya existe un usuario con ese CUIT.';errBox.style.display='block';return;}
+
+  const btn=document.querySelector('#modal-nuevo-estudio .btn-success');
+  const textoOriginal=btn.textContent;
+  btn.disabled=true;btn.textContent='Creando...';
+
+  try{
+    // 1. Crear el estudio
+    const{data:estudio,error:errEst}=await sb.from('estudios').insert({nombre,cuit,activo:true,sin_cargo:false,plan}).select().single();
+    if(errEst)throw errEst;
+
+    // 2. Crear usuario contador para ese estudio
+    const{error:errUsr}=await sb.from('usuarios').insert({tipo:'contador',estudio_id:estudio.id,cuit_cuil:cuit,nombre:nombreContador,primer_acceso:true,es_admin:false});
+    if(errUsr)throw errUsr;
+
+    cerrarModal('modal-nuevo-estudio');
+    document.getElementById('ne-nombre').value='';
+    document.getElementById('ne-cuit').value='';
+    document.getElementById('ne-nombre-contador').value='';
+
+    await cargarEstudios();
+    await cargarMetricasAdmin();
+
+    const claveInicial=cuit.slice(2,10);
+    alert(`✅ Estudio creado.\n\n${nombreContador} ya puede ingresar con:\nCUIT: ${fc(cuit)}\nContraseña inicial: ${claveInicial}\n\n(En el primer ingreso va a crear su contraseña definitiva.)`);
+  }catch(err){
+    console.error('Error creando estudio:',err);
+    errBox.textContent='Ocurrió un error al crear el estudio. Probá de nuevo.';
+    errBox.style.display='block';
+  }finally{
+    btn.disabled=false;btn.textContent=textoOriginal;
+  }
 }
 
 // ─── CONTADOR ───
@@ -763,10 +930,17 @@ async function initContador(){
 }
 
 async function cargarDashboardContador(){
-  const{data:empresas}=await sb.from('empresas').select('id,nombre,cuit').eq('activa',true);
-  const{data:empleados}=await sb.from('empleados').select('id').eq('activo',true);
-  const{data:firmados}=await sb.from('constancias').select('id');
-  const{data:publicados}=await sb.from('recibos').select('id').eq('estado','publicado');
+  const estudioId=currentUser.estudio_id;
+  const{data:empresas}=await sb.from('empresas').select('id,nombre,cuit').eq('activa',true).eq('estudio_id',estudioId);
+  const empresaIds=empresas?.map(e=>e.id)||[];
+  const{data:empleados}=empresaIds.length?await sb.from('empleados').select('id').in('empresa_id',empresaIds).eq('activo',true):{data:[]};
+  let reciboIds=[];
+  if(empresaIds.length){
+    const{data:recibosData}=await sb.from('recibos').select('id').in('empresa_id',empresaIds);
+    reciboIds=recibosData?.map(r=>r.id)||[];
+  }
+  const{data:firmados}=reciboIds.length?await sb.from('constancias').select('id').in('recibo_id',reciboIds):{data:[]};
+  const{data:publicados}=empresaIds.length?await sb.from('recibos').select('id').in('empresa_id',empresaIds).eq('estado','publicado'):{data:[]};
 
   document.getElementById('st-empresas').textContent=empresas?.length||0;
   document.getElementById('st-empleados').textContent=empleados?.length||0;
@@ -787,7 +961,8 @@ async function cargarDashboardContador(){
 }
 
 async function cargarSelectEmpresas(){
-  const{data:empresas}=await sb.from('empresas').select('id,nombre').eq('activa',true);
+  const estudioId=currentUser.estudio_id;
+  const{data:empresas}=await sb.from('empresas').select('id,nombre').eq('activa',true).eq('estudio_id',estudioId);
   ['select-empresa','select-empresa-empl','filtro-empresa-rec','select-empresa-contrib'].forEach(id=>{
     const sel=document.getElementById(id);
     if(!sel)return;
@@ -824,12 +999,12 @@ async function crearCliente(){
   btn.disabled=true;btn.textContent='Creando...';
 
   try{
-    // 1. Crear la empresa
-    const{data:empresa,error:errEmp}=await sb.from('empresas').insert({nombre:nombreEmpresa,cuit:cuitEmpresa,activa:true}).select().single();
+    // 1. Crear la empresa vinculada al estudio del contador
+    const{data:empresa,error:errEmp}=await sb.from('empresas').insert({nombre:nombreEmpresa,cuit:cuitEmpresa,activa:true,estudio_id:currentUser.estudio_id}).select().single();
     if(errEmp)throw errEmp;
 
-    // 2. Crear el usuario empleador (login con CUIT + DNI como clave inicial, igual que un empleado)
-    const{error:errUsr}=await sb.from('usuarios').insert({tipo:'empleador',empresa_id:empresa.id,cuit_cuil:cuitEmpresa,nombre:nombreEmpleador,primer_acceso:true});
+    // 2. Crear el usuario empleador vinculado al estudio
+    const{error:errUsr}=await sb.from('usuarios').insert({tipo:'empleador',empresa_id:empresa.id,cuit_cuil:cuitEmpresa,nombre:nombreEmpleador,primer_acceso:true,estudio_id:currentUser.estudio_id});
     if(errUsr)throw errUsr;
 
     // 3. Crear contribuciones por defecto (valores estándar, el contador los puede ajustar luego)
