@@ -1181,6 +1181,30 @@ async function procesarXLS(){
   if(!empId){alert('Seleccioná una empresa primero.');return;}
   if(!xlsData){alert('Subí el archivo .xls primero.');return;}
 
+  // Detectar período del archivo
+  const periodos=[...new Set(xlsData.map(r=>r.Período||'').filter(Boolean))];
+  
+  // Verificar si ya existen recibos para esa empresa y período
+  if(periodos.length>0){
+    const{data:existentes}=await sb.from('recibos')
+      .select('id,periodo,tipo,estado')
+      .eq('empresa_id',empId)
+      .in('periodo',periodos);
+    
+    if(existentes?.length>0){
+      const empresa=document.getElementById('select-empresa').options[document.getElementById('select-empresa').selectedIndex].text;
+      const periodosStr=periodos.join(', ');
+      const estados=[...new Set(existentes.map(r=>r.estado))].join(', ');
+      const confirmado=confirm(
+        `⚠️ Ya existen ${existentes.length} recibo(s) cargados para:\n\n`+
+        `Empresa: ${empresa}\nPeríodo: ${periodosStr}\nEstado actual: ${estados}\n\n`+
+        `¿Querés reemplazarlos con el archivo nuevo?\n`+
+        `(Los recibos ya firmados o publicados no se modificarán)`
+      );
+      if(!confirmado)return;
+    }
+  }
+
   const{data:empleados}=await sb.from('empleados').select('id,cuil,nombre').eq('empresa_id',empId);
   const mapCuil={};
   empleados?.forEach(e=>mapCuil[nc(e.cuil)]=e);
@@ -1201,13 +1225,17 @@ async function procesarXLS(){
       datos_json:rec,estado:'borrador',
     };
 
+    // No pisar recibos ya publicados o firmados
+    const{data:existente}=await sb.from('recibos').select('id,estado').eq('empresa_id',empId).eq('empleado_id',empleado.id).eq('periodo',payload.periodo).eq('tipo',payload.tipo).maybeSingle();
+    if(existente&&(existente.estado==='publicado'||existente.estado==='revocado')){skip++;continue;}
+
     const{error}=await sb.from('recibos').upsert(payload,{onConflict:'empresa_id,empleado_id,periodo,tipo'});
     if(!error)ok++;else skip++;
   }
 
   let msg=`✅ ${ok} recibos guardados como borrador.`;
   if(sinEmpleado.length)msg+=`\n⚠️ ${sinEmpleado.length} sin empleado en el sistema: ${sinEmpleado.slice(0,3).join(', ')}${sinEmpleado.length>3?'...':''}`;
-  if(skip)msg+=`\n❌ ${skip} errores.`;
+  if(skip)msg+=`\n🔒 ${skip} no modificados (ya estaban publicados o revocados).`;
   alert(msg);
 }
 
