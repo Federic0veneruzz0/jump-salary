@@ -115,6 +115,7 @@ tr:last-child td{border-bottom:none;}
 .badge-borrador{background:#edf2f7;color:#4a5568;}
 .badge-publicado{background:#ebf8ff;color:#2b6cb0;}
 .badge-revocado{background:var(--danger-bg);color:var(--danger);}
+.badge-rechazado{background:#fff3e0;color:#c05621;}
 .badge-firmado{background:var(--success-bg);color:var(--success);}
 .badge-pendiente{background:var(--warning-bg);color:var(--warning);}
 
@@ -490,6 +491,22 @@ tr:last-child td{border-bottom:none;}
     </div>
     <div style="text-align:center;margin-top:12px;">
       <button class="btn-sm btn-outline" onclick="cerrarModal('modal-firmar')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL RECHAZAR RECIBO -->
+<div class="modal-overlay" id="modal-rechazar">
+  <div class="modal">
+    <div class="modal-title">Rechazar recibo</div>
+    <div class="modal-sub">Indicá qué necesita corregirse. Tu contador va a ver este mensaje y podrá corregirlo.</div>
+    <div class="field" style="margin-top:12px;">
+      <label>Motivo del rechazo</label>
+      <textarea id="motivo-rechazo" rows="4" placeholder="Ej: El sueldo básico no coincide con el convenio, falta el adicional por antigüedad..." style="width:100%;padding:10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;resize:vertical;"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-rechazar')">Cancelar</button>
+      <button class="btn-sm btn-danger" style="flex:1;" onclick="confirmarRechazo()">❌ Confirmar rechazo</button>
     </div>
   </div>
 </div>
@@ -1091,7 +1108,7 @@ async function cargarRecibosContador(){
   if(!recibos?.length){document.getElementById('tabla-recibos-contador').innerHTML=`<div class="empty"><div class="empty-icon">📄</div><div class="empty-title">Sin recibos</div></div>`;return;}
   let html=`<div class="card"><table><thead><tr><th><input type="checkbox" class="chk-todos" onchange="toggleSeleccionarTodos(this)" title="Seleccionar todos los firmados"></th><th>Empleado</th><th>Empresa</th><th>Período</th><th>Tipo</th><th>Neto</th><th>Estado</th><th>Firma</th><th></th></tr></thead><tbody>`;
   recibos.forEach(r=>{
-    const badgeClass={borrador:'badge-borrador',publicado:'badge-publicado',revocado:'badge-revocado'}[r.estado]||'badge-borrador';
+    const badgeClass={borrador:'badge-borrador',publicado:'badge-publicado',revocado:'badge-revocado',rechazado:'badge-rechazado'}[r.estado]||'badge-borrador';
     const firmadoOk=r.estado==='publicado'&&!!firmaPorRecibo[r.id];
     let firmaHtml='—';
     if(r.estado==='publicado'){
@@ -1103,9 +1120,10 @@ async function cargarRecibosContador(){
         firmaHtml=`<div class="semaforo"><div class="dot dot-yellow"></div>Pendiente</div>`;
       }
     }
+    const motivoRechazoHtml=r.estado==='rechazado'&&r.motivo_rechazo?`<div style="font-size:11px;color:var(--danger);margin-top:3px;">⚠️ ${r.motivo_rechazo}</div>`:'';
     html+=`<tr>
       <td>${firmadoOk?`<input type="checkbox" class="chk-recibo" data-id="${r.id}" ${seleccionados.has(r.id)?'checked':''} onchange="toggleSeleccionRecibo('${r.id}',this.checked)" title="Seleccionar para descarga combinada">`:''}</td>
-      <td><strong>${r.empleados?.nombre||'—'}</strong><br><small style="color:var(--text3)">${fc(r.empleados?.cuil||'')}</small></td>
+      <td><strong>${r.empleados?.nombre||'—'}</strong><br><small style="color:var(--text3)">${fc(r.empleados?.cuil||'')}</small>${motivoRechazoHtml}</td>
       <td>${r.empresas?.nombre||'—'}</td>
       <td>${parseMes(r.periodo)}</td>
       <td>${r.tipo}</td>
@@ -1240,7 +1258,7 @@ async function cargarRecibosEmpleador(){
   recibos.forEach(r=>{
     const firmado=firmadosIds.has(r.id);
     const firmadoOk=r.estado==='publicado'&&firmado;
-    const badgeClass={borrador:'badge-borrador',publicado:'badge-publicado',revocado:'badge-revocado'}[r.estado];
+    const badgeClass={borrador:'badge-borrador',publicado:'badge-publicado',revocado:'badge-revocado',rechazado:'badge-rechazado'}[r.estado];
     let firmaHtml='—';
     if(r.estado==='publicado'){
       if(firmado){
@@ -1251,7 +1269,16 @@ async function cargarRecibosEmpleador(){
         firmaHtml=`<div class="semaforo"><div class="dot dot-yellow"></div>Pendiente</div>`;
       }
     }
-    const accionHtml=`<button class="btn-sm btn-outline" style="margin-right:6px;" onclick="verRecibo('${r.id}')">Ver</button>${r.estado==='borrador'?`<button class="btn-sm btn-success" onclick="aprobarRecibo('${r.id}')">Aprobar</button>`:''}`;
+    const accionHtml=`<button class="btn-sm btn-outline" style="margin-right:6px;" onclick="verRecibo('${r.id}')">Ver</button>${r.estado==='borrador'?`<button class="btn-sm btn-success" onclick="aprobarRecibo('${r.id}')">Aprobar</button><button class="btn-sm btn-danger" style="margin-left:4px;" onclick="iniciarRechazo('${r.id}')">Rechazar</button>`:''}`;
+    const motivoHtml=r.estado==='rechazado'&&r.motivo_rechazo?`<div style="font-size:11px;color:var(--danger);margin-top:3px;">⚠️ ${r.motivo_rechazo}</div>`:'';
+    html+=`<tr>
+      <td>${firmadoOk?`<input type="checkbox" class="chk-recibo" data-id="${r.id}" ${seleccionados.has(r.id)?'checked':''} onchange="toggleSeleccionRecibo('${r.id}',this.checked)" title="Seleccionar para descarga combinada">`:''}</td>
+      <td><strong>${r.empleados?.nombre||'—'}</strong>${motivoHtml}</td>
+      <td>${parseMes(r.periodo)}</td><td>${r.tipo}</td>
+      <td>${mon(r.neto_redondeado||r.neto)}</td>
+      <td><span class="badge ${badgeClass}">${r.estado}</span></td>
+      <td>${firmaHtml}</td><td>${accionHtml}</td>
+    </tr>`;
     html+=`<tr>
       <td>${firmadoOk?`<input type="checkbox" class="chk-recibo" data-id="${r.id}" ${seleccionados.has(r.id)?'checked':''} onchange="toggleSeleccionRecibo('${r.id}',this.checked)" title="Seleccionar para descarga combinada">`:''}</td>
       <td><strong>${r.empleados?.nombre||'—'}</strong></td>
@@ -1445,7 +1472,9 @@ async function verRecibo(reciboId){
 
   const actions=document.getElementById('modal-recibo-actions');
   if(r.estado==='borrador'){
-    actions.innerHTML=`<button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-ver-recibo')">Cancelar</button><button class="btn-sm btn-success" style="flex:1;padding:10px;" onclick="aprobarRecibo('${r.id}')">✅ Aprobar este recibo</button>`;
+    actions.innerHTML=`<button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-ver-recibo')">Cancelar</button><button class="btn-sm btn-danger" style="flex:1;padding:10px;" onclick="iniciarRechazo('${r.id}')">❌ Rechazar</button><button class="btn-sm btn-success" style="flex:1;padding:10px;" onclick="aprobarRecibo('${r.id}')">✅ Aprobar</button>`;
+  } else if(r.estado==='rechazado'){
+    actions.innerHTML=`<button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-ver-recibo')">Cerrar</button>`;
   } else {
     actions.innerHTML=`<button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-ver-recibo')">Cerrar</button><button class="btn-sm btn-outline" style="flex:1;" onclick="generarPDFRecibo('${r.id}',false)">⬇️ Descargar PDF</button>`;
   }
@@ -1457,6 +1486,24 @@ async function aprobarRecibo(reciboId){
   await sb.from('recibos').update({estado:'publicado'}).eq('id',reciboId);
   await sb.from('recibo_historial').insert({recibo_id:reciboId,accion:'aprobado',usuario_id:currentUser.id});
   cerrarModal('modal-ver-recibo');
+  await cargarRecibosEmpleador();
+}
+
+// ─── RECHAZAR RECIBO (empleador) ───
+let reciboArechazar=null;
+function iniciarRechazo(reciboId){
+  reciboArechazar=reciboId;
+  document.getElementById('motivo-rechazo').value='';
+  cerrarModal('modal-ver-recibo');
+  abrirModal('modal-rechazar');
+}
+async function confirmarRechazo(){
+  const motivo=document.getElementById('motivo-rechazo').value.trim();
+  if(!motivo){alert('Ingresá el motivo del rechazo para que el contador pueda corregirlo.');return;}
+  await sb.from('recibos').update({estado:'borrador',motivo_rechazo:motivo}).eq('id',reciboArechazar);
+  await sb.from('recibo_historial').insert({recibo_id:reciboArechazar,accion:'rechazado',usuario_id:currentUser.id,motivo});
+  cerrarModal('modal-rechazar');
+  reciboArechazar=null;
   await cargarRecibosEmpleador();
 }
 
