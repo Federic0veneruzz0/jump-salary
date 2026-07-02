@@ -1307,14 +1307,6 @@ async function cargarRecibosEmpleador(){
       <td><span class="badge ${badgeClass}">${r.estado}</span></td>
       <td>${firmaHtml}</td><td>${accionHtml}</td>
     </tr>`;
-    html+=`<tr>
-      <td>${firmadoOk?`<input type="checkbox" class="chk-recibo" data-id="${r.id}" ${seleccionados.has(r.id)?'checked':''} onchange="toggleSeleccionRecibo('${r.id}',this.checked)" title="Seleccionar para descarga combinada">`:''}</td>
-      <td><strong>${r.empleados?.nombre||'—'}</strong></td>
-      <td>${parseMes(r.periodo)}</td><td>${r.tipo}</td>
-      <td>${mon(r.neto_redondeado||r.neto)}</td>
-      <td><span class="badge ${badgeClass}">${r.estado}</span></td>
-      <td>${firmaHtml}</td><td>${accionHtml}</td>
-    </tr>`;
   });
   html+=`</tbody></table></div>`;
   document.getElementById('tabla-recibos-empleador').innerHTML=html;
