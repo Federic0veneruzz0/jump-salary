@@ -1098,10 +1098,15 @@ async function cargarRecibosContador(){
   const empId=document.getElementById('filtro-empresa-rec')?.value;
   const estado=document.getElementById('filtro-estado-rec')?.value;
   let q=sb.from('recibos').select('*,empleados(nombre,cuil),empresas(nombre)').order('created_at',{ascending:false}).limit(100);
+  // Filtrar solo por empresas del estudio del contador
+  const{data:empresasEstudio}=await sb.from('empresas').select('id').eq('estudio_id',currentUser.estudio_id).eq('activa',true);
+  const idsEstudio=empresasEstudio?.map(e=>e.id)||[];
+  if(!idsEstudio.length){document.getElementById('tabla-recibos-contador').innerHTML=`<div class="empty"><div class="empty-icon">📄</div><div class="empty-title">Sin recibos todavía</div></div>`;return;}
+  q=q.in('empresa_id',idsEstudio);
   if(empId)q=q.eq('empresa_id',empId);
   if(estado)q=q.eq('estado',estado);
   const{data:recibos}=await q;
-  const{data:constancias}=await sb.from('constancias').select('recibo_id,fecha_firma');
+  const{data:constancias}=recibos?.length?await sb.from('constancias').select('recibo_id,fecha_firma').in('recibo_id',recibos.map(r=>r.id)):{data:[]};
   const firmaPorRecibo={};
   constancias?.forEach(c=>{firmaPorRecibo[c.recibo_id]=c.fecha_firma;});
 
@@ -1270,7 +1275,7 @@ async function cargarRecibosEmpleador(){
 
   const borradores=recibos?.filter(r=>r.estado==='borrador')||[];
   const publicados=recibos?.filter(r=>r.estado==='publicado')||[];
-  const{data:constancias}=await sb.from('constancias').select('recibo_id,fecha_firma');
+  const{data:constancias}=recibos?.length?await sb.from('constancias').select('recibo_id,fecha_firma').in('recibo_id',recibos.map(r=>r.id)):{data:[]};
   const firmaPorRecibo={};
   constancias?.forEach(c=>{firmaPorRecibo[c.recibo_id]=c.fecha_firma;});
   const firmadosIds=new Set(constancias?.map(c=>c.recibo_id)||[]);
