@@ -615,10 +615,20 @@ async function doLogin(){
   }
 
   // Login normal con Supabase Auth
-  // Si no tiene email real, usar el email interno basado en CUIT
-  const emailLogin=usuario.email||`${cuit}@internal.jumpsalary.com.ar`;
-  const{error:authErr}=await sb.auth.signInWithPassword({email:emailLogin,password:pass});
-  if(authErr){
+  // Intentar con email real primero, luego con email interno basado en CUIT
+  const emailReal=usuario.email;
+  const emailInterno=`${cuit}@internal.jumpsalary.com.ar`;
+
+  let authOk=false;
+  if(emailReal){
+    const{error:e1}=await sb.auth.signInWithPassword({email:emailReal,password:pass});
+    if(!e1) authOk=true;
+  }
+  if(!authOk){
+    const{error:e2}=await sb.auth.signInWithPassword({email:emailInterno,password:pass});
+    if(!e2) authOk=true;
+  }
+  if(!authOk){
     showErr('login-err','Contraseña incorrecta. Si es tu primer acceso usá los 8 números del medio de tu CUIT/CUIL.');
     return;
   }
