@@ -278,9 +278,13 @@ tr:last-child td{border-bottom:none;}
 <!-- APP -->
 <div class="app" id="app">
   <div class="topbar">
-    <div style="display:flex;align-items:center;">
+    <div style="display:flex;align-items:center;gap:12px;">
       <div class="topbar-logo">Jump <span>Salary</span></div>
-      <div class="topbar-info" id="topbar-empresa"></div>
+      <div id="topbar-empresa-selector" style="display:none;">
+        <select id="select-empresa-activa" onchange="cambiarEmpresaActiva(this.value)" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;outline:none;">
+          <option value="">Seleccioná una empresa...</option>
+        </select>
+      </div>
     </div>
     <div class="topbar-right">
       <div>
@@ -573,7 +577,8 @@ let reciboActivo = null;
 let xlsData = null;
 let arcaData = null;
 let conceptosMap = {};
-let seleccionados = new Set(); // recibos seleccionados para impresión/descarga múltiple (solo firmados+publicados)
+let seleccionados = new Set();
+let empresaActivaId = null; // empresa seleccionada en el topbar para el panel del contador
 
 const CONCEPTOS_DEFAULT = {
   '1':{nombre:'Sueldo Basico',tipo:'rem'},'7':{nombre:'Presentismo',tipo:'rem'},
@@ -729,7 +734,10 @@ async function guardarNuevaClave(){
 }
 
 async function cargarContribuciones(){
-  const empId=document.getElementById('select-empresa-contrib').value;
+  // Usar empresa activa del topbar si no hay selección manual
+  const sel=document.getElementById('select-empresa-contrib');
+  if(empresaActivaId && sel) sel.value=empresaActivaId;
+  const empId=sel?.value||empresaActivaId;
   if(!empId){document.getElementById('form-contribuciones').classList.add('hidden');return;}
   const{data:cfg}=await sb.from('contribuciones_empresa').select('*').eq('empresa_id',empId).single();
   const form=document.getElementById('form-contribuciones');
@@ -772,7 +780,9 @@ async function guardarContribuciones(){
 async function doLogout(){
   await sb.auth.signOut();
   currentUser=null;
+  empresaActivaId=null;
   limpiarSeleccion();
+  document.getElementById('topbar-empresa-selector').style.display='none';
   document.getElementById('app').classList.remove('visible');
   document.getElementById('login-wrap').style.display='flex';
   document.getElementById('login-step-1').style.display='block';
@@ -798,7 +808,10 @@ async function iniciarApp(){
   document.getElementById('topbar-rol').textContent=rolLabel;
 
   if(esAdminPlataforma) await initAdminPlataforma();
-  else if(currentUser.tipo==='contador') await initContador();
+  else if(currentUser.tipo==='contador'){
+    document.getElementById('topbar-empresa-selector').style.display='block';
+    await initContador();
+  }
   else if(currentUser.tipo==='empleador') await initEmpleador();
   else await initEmpleado();
 }
@@ -834,6 +847,19 @@ function navTo(pageId,clickedEl){
   if(pageId==='page-admin-metricas') cargarMetricasAdmin();
   if(pageId==='page-recibos-contador') cargarRecibosContador();
   if(pageId==='page-dashboard') cargarDashboardContador();
+  if(pageId==='page-empleados') cargarEmpleados();
+  if(pageId==='page-contribuciones') cargarContribuciones();
+}
+
+async function cargarEmpleados(){
+  if(!empresaActivaId){
+    document.getElementById('tabla-empleados').innerHTML=`<div class="empty"><div class="empty-icon">👥</div><div class="empty-title">Seleccioná una empresa</div><div class="empty-sub">Elegí una empresa en el selector de arriba para ver sus empleados.</div></div>`;
+    return;
+  }
+  // Preseleccionar en el select interno
+  const sel=document.getElementById('select-empresa-empl');
+  if(sel) sel.value=empresaActivaId;
+  await cargarTablaEmpleados(empresaActivaId);
 }
 
 let adminOriginal = null; // guarda el estado original del admin para poder volver
@@ -851,6 +877,10 @@ async function impersonarEstudio(estudioId, estudioNombre){
     _impersonando: true,
     _estudioNombre: estudioNombre
   };
+
+  // Mostrar selector de empresa en topbar
+  document.getElementById('topbar-empresa-selector').style.display='block';
+  empresaActivaId=null; // resetear empresa activa al entrar a un nuevo estudio
 
   // Mostrar botón de volver
   document.getElementById('btn-volver-admin').style.display='inline-block';
@@ -870,6 +900,10 @@ async function volverAdminPlataforma(){
   // Restaurar usuario original
   currentUser = {...adminOriginal};
   adminOriginal = null;
+
+  // Ocultar selector de empresa
+  document.getElementById('topbar-empresa-selector').style.display='none';
+  empresaActivaId=null;
 
   // Ocultar botón de volver y limpiar topbar
   document.getElementById('btn-volver-admin').style.display='none';
@@ -1003,7 +1037,9 @@ async function initContador(){
 
 async function cargarDashboardContador(){
   const estudioId=currentUser.estudio_id;
-  const{data:empresas}=await sb.from('empresas').select('id,nombre,cuit').eq('activa',true).eq('estudio_id',estudioId);
+  let qEmp=sb.from('empresas').select('id,nombre,cuit').eq('activa',true).eq('estudio_id',estudioId);
+  if(empresaActivaId) qEmp=qEmp.eq('id',empresaActivaId);
+  const{data:empresas}=await qEmp;
   const empresaIds=empresas?.map(e=>e.id)||[];
   const{data:empleados}=empresaIds.length?await sb.from('empleados').select('id').in('empresa_id',empresaIds).eq('activo',true):{data:[]};
   let reciboIds=[];
@@ -1035,13 +1071,48 @@ async function cargarDashboardContador(){
 async function cargarSelectEmpresas(){
   const estudioId=currentUser.estudio_id;
   const{data:empresas}=await sb.from('empresas').select('id,nombre').eq('activa',true).eq('estudio_id',estudioId);
+
+  // Selector del topbar
+  const sel=document.getElementById('select-empresa-activa');
+  if(sel){
+    sel.innerHTML='<option value="">Seleccioná una empresa...</option>';
+    empresas?.forEach(e=>{
+      sel.innerHTML+=`<option value="${e.id}" ${empresaActivaId===e.id?'selected':''}>${e.nombre}</option>`;
+    });
+    // Si hay una sola empresa, seleccionarla automáticamente
+    if(empresas?.length===1 && !empresaActivaId){
+      empresaActivaId=empresas[0].id;
+      sel.value=empresaActivaId;
+    }
+  }
+
+  // Resto de selectores internos (subir liquidación, empleados, contribuciones)
   ['select-empresa','select-empresa-empl','filtro-empresa-rec','select-empresa-contrib'].forEach(id=>{
-    const sel=document.getElementById(id);
-    if(!sel)return;
-    const first=sel.options[0].outerHTML;
-    sel.innerHTML=first;
-    empresas?.forEach(e=>{sel.innerHTML+=`<option value="${e.id}">${e.nombre}</option>`;});
+    const s=document.getElementById(id);
+    if(!s)return;
+    const first=s.options[0].outerHTML;
+    s.innerHTML=first;
+    empresas?.forEach(e=>{s.innerHTML+=`<option value="${e.id}">${e.nombre}</option>`;});
+    // Preseleccionar la empresa activa
+    if(empresaActivaId) s.value=empresaActivaId;
   });
+}
+
+async function cambiarEmpresaActiva(empId){
+  empresaActivaId=empId;
+  // Sincronizar todos los selectores internos
+  ['select-empresa','select-empresa-empl','filtro-empresa-rec','select-empresa-contrib'].forEach(id=>{
+    const s=document.getElementById(id);
+    if(s) s.value=empId;
+  });
+  // Recargar la página activa
+  const paginaActiva=document.querySelector('.page.active');
+  if(!paginaActiva)return;
+  const pageId=paginaActiva.id;
+  if(pageId==='page-dashboard') await cargarDashboardContador();
+  else if(pageId==='page-recibos-contador') await cargarRecibosContador();
+  else if(pageId==='page-empleados') await cargarEmpleados();
+  else if(pageId==='page-contribuciones') await cargarContribuciones();
 }
 
 // ─── ALTA DE CLIENTES (self-service, sin tocar Supabase) ───
@@ -1111,6 +1182,7 @@ async function cargarRecibosContador(){
   if(!idsEstudio.length){document.getElementById('tabla-recibos-contador').innerHTML=`<div class="empty"><div class="empty-icon">📄</div><div class="empty-title">Sin recibos todavía</div></div>`;return;}
   q=q.in('empresa_id',idsEstudio);
   if(empId)q=q.eq('empresa_id',empId);
+  else if(empresaActivaId)q=q.eq('empresa_id',empresaActivaId);
   if(estado)q=q.eq('estado',estado);
   const{data:recibos}=await q;
   const{data:constancias}=recibos?.length?await sb.from('constancias').select('recibo_id,fecha_firma').in('recibo_id',recibos.map(r=>r.id)):{data:[]};
