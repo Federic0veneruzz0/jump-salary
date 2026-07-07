@@ -1326,7 +1326,6 @@ async function procesarXLS(){
 async function initEmpleador(){
   const{data:empresa}=await sb.from('empresas').select('*').eq('id',currentUser.empresa_id).single();
   currentEmpresa=empresa;
-  document.getElementById('topbar-empresa').textContent=empresa?.nombre||'';
   document.getElementById('empleador-empresa-sub').textContent=empresa?.nombre+' · '+fc(empresa?.cuit||'');
 
   const sidebarItems=[
