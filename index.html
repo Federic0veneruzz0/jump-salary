@@ -343,11 +343,7 @@ tr:last-child td{border-bottom:none;}
 
       <div class="page" id="page-subir">
         <div class="page-title">Subir liquidación</div>
-        <div class="page-sub">Seleccioná la empresa y subí el archivo .xls del SOS BETA</div>
-        <div class="card">
-          <div class="card-title">Empresa</div>
-          <div class="field"><label>Cliente</label><select id="select-empresa" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius);"><option value="">Seleccioná una empresa...</option></select></div>
-        </div>
+        <div class="page-sub">Subí el archivo .xls del SOS BETA para la empresa seleccionada en el panel</div>
         <div class="card">
           <div class="card-title">Archivos</div>
           <div class="upload-zone" id="dz-xls-main" onclick="document.getElementById('fi-xls-main').click()">
@@ -372,7 +368,6 @@ tr:last-child td{border-bottom:none;}
         <div class="page-sub">Alta masiva desde archivo ARCA o gestión individual</div>
         <div class="card">
           <div class="card-title">Importar desde ARCA</div>
-          <div class="field"><label>Empresa</label><select id="select-empresa-empl" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius);"><option value="">Seleccioná una empresa...</option></select></div>
           <div class="upload-zone" id="dz-arca" onclick="document.getElementById('fi-arca').click()">
             <div class="upload-icon">🏛️</div>
             <div class="upload-title">ConsRelLab.txt de ARCA</div>
@@ -392,7 +387,6 @@ tr:last-child td{border-bottom:none;}
         <div class="page-sub">Revisá y gestioná los recibos de todos los clientes</div>
         <div class="card" style="padding:16px;">
           <div style="display:flex;gap:12px;flex-wrap:wrap;">
-            <select id="filtro-empresa-rec" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" onchange="cargarRecibosContador()"><option value="">Todas las empresas</option></select>
             <select id="filtro-estado-rec" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" onchange="cargarRecibosContador()">
               <option value="">Todos los estados</option>
               <option value="borrador">Borrador</option>
@@ -420,11 +414,7 @@ tr:last-child td{border-bottom:none;}
       <!-- PANEL CONTRIBUCIONES -->
       <div class="page" id="page-contribuciones">
         <div class="page-title">Contribuciones patronales</div>
-        <div class="page-sub">Configurá las tasas de cada empresa cliente</div>
-        <div class="card">
-          <div class="card-title">Empresa</div>
-          <div class="field"><select id="select-empresa-contrib" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius);" onchange="cargarContribuciones()"><option value="">Seleccioná una empresa...</option></select></div>
-        </div>
+        <div class="page-sub">Configurá las tasas de la empresa seleccionada en el panel</div>
         <div id="form-contribuciones" class="hidden">
           <div class="card">
             <div class="card-title">Tasas nacionales fijas</div>
@@ -625,11 +615,11 @@ async function doLogin(){
   }
 
   // Login normal con Supabase Auth
-  if(!usuario.email){showErr('login-err','No hay email registrado para este usuario. Contactá al administrador.');return;}
-  const{error:authErr}=await sb.auth.signInWithPassword({email:usuario.email,password:pass});
+  // Si no tiene email real, usar el email interno basado en CUIT
+  const emailLogin=usuario.email||`${cuit}@internal.jumpsalary.com.ar`;
+  const{error:authErr}=await sb.auth.signInWithPassword({email:emailLogin,password:pass});
   if(authErr){
-    // Intentar con email alternativo basado en CUIT
-    showErr('login-err','Contraseña incorrecta. Si es tu primer acceso verificá el email que te enviaron.');
+    showErr('login-err','Contraseña incorrecta. Si es tu primer acceso usá los 8 números del medio de tu CUIT/CUIL.');
     return;
   }
   currentUser=usuario;
@@ -1087,14 +1077,13 @@ async function cargarSelectEmpresas(){
     }
   }
 
-  // Resto de selectores internos (subir liquidación, empleados, contribuciones)
+  // Selectores internos que aún existen (solo como hidden inputs para compatibilidad)
   ['select-empresa','select-empresa-empl','filtro-empresa-rec','select-empresa-contrib'].forEach(id=>{
     const s=document.getElementById(id);
     if(!s)return;
-    const first=s.options[0].outerHTML;
+    const first=s.options?.[0]?.outerHTML||'';
     s.innerHTML=first;
     empresas?.forEach(e=>{s.innerHTML+=`<option value="${e.id}">${e.nombre}</option>`;});
-    // Preseleccionar la empresa activa
     if(empresaActivaId) s.value=empresaActivaId;
   });
 }
@@ -1174,16 +1163,14 @@ async function crearCliente(){
 }
 
 async function cargarRecibosContador(){
-  const empId=document.getElementById('filtro-empresa-rec')?.value;
   const estado=document.getElementById('filtro-estado-rec')?.value;
-  let q=sb.from('recibos').select('*,empleados(nombre,cuil),empresas(nombre)').order('created_at',{ascending:false}).limit(100);
   // Filtrar solo por empresas del estudio del contador
   const{data:empresasEstudio}=await sb.from('empresas').select('id').eq('estudio_id',currentUser.estudio_id).eq('activa',true);
   const idsEstudio=empresasEstudio?.map(e=>e.id)||[];
   if(!idsEstudio.length){document.getElementById('tabla-recibos-contador').innerHTML=`<div class="empty"><div class="empty-icon">📄</div><div class="empty-title">Sin recibos todavía</div></div>`;return;}
-  q=q.in('empresa_id',idsEstudio);
-  if(empId)q=q.eq('empresa_id',empId);
-  else if(empresaActivaId)q=q.eq('empresa_id',empresaActivaId);
+  let q=sb.from('recibos').select('*,empleados(nombre,cuil),empresas(nombre)').order('created_at',{ascending:false}).limit(100);
+  if(empresaActivaId) q=q.eq('empresa_id',empresaActivaId);
+  else q=q.in('empresa_id',idsEstudio);
   if(estado)q=q.eq('estado',estado);
   const{data:recibos}=await q;
   const{data:constancias}=recibos?.length?await sb.from('constancias').select('recibo_id,fecha_firma').in('recibo_id',recibos.map(r=>r.id)):{data:[]};
@@ -1228,8 +1215,8 @@ async function cargarRecibosContador(){
 
 // ─── IMPORTAR ARCA ───
 async function importarARCA(){
-  const empId=document.getElementById('select-empresa-empl').value;
-  if(!empId){alert('Seleccioná una empresa primero.');return;}
+  const empId=empresaActivaId||document.getElementById('select-empresa-empl')?.value;
+  if(!empId){alert('Seleccioná una empresa en el panel superior primero.');return;}
   if(!arcaData){alert('Subí el archivo ConsRelLab.txt primero.');return;}
 
   let creados=0,actualizados=0;
@@ -1262,8 +1249,8 @@ async function cargarTablaEmpleados(empId){
 
 // ─── PROCESAR XLS ───
 async function procesarXLS(){
-  const empId=document.getElementById('select-empresa').value;
-  if(!empId){alert('Seleccioná una empresa primero.');return;}
+  const empId=empresaActivaId||document.getElementById('select-empresa')?.value;
+  if(!empId){alert('Seleccioná una empresa en el panel superior primero.');return;}
   if(!xlsData){alert('Subí el archivo .xls primero.');return;}
 
   // Detectar período del archivo
