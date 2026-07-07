@@ -163,6 +163,13 @@ tr:last-child td{border-bottom:none;}
 .barra-seleccion-count{font-size:13px;font-weight:600;}
 .barra-seleccion-count span{color:var(--gold);}
 
+/* TOAST NOTIFICACIONES */
+.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(20px);background:#1a2e5a;color:#fff;border-radius:8px;padding:12px 20px;font-size:13px;font-weight:600;box-shadow:0 4px 20px rgba(0,0,0,.25);z-index:999;opacity:0;transition:all .25s ease;pointer-events:none;white-space:nowrap;}
+.toast.visible{opacity:1;transform:translateX(-50%) translateY(0);}
+.toast.toast-ok{background:#1a6b3a;}
+.toast.toast-err{background:#b71c1c;}
+.toast.toast-warn{background:#b8860b;}
+
 .firma-card{background:linear-gradient(135deg,var(--navy) 0%,var(--navy2) 100%);color:#fff;border-radius:var(--radius-lg);padding:24px;text-align:center;margin-bottom:20px;}
 .firma-icon{font-size:48px;margin-bottom:12px;}
 .firma-title{font-size:18px;font-weight:700;margin-bottom:6px;}
@@ -446,6 +453,9 @@ tr:last-child td{border-bottom:none;}
     </div>
   </div>
 </div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
 
 <!-- BARRA FLOTANTE DE SELECCIÓN MÚLTIPLE (solo recibos publicados + firmados) -->
 <div class="barra-seleccion" id="barra-seleccion">
@@ -756,10 +766,7 @@ async function guardarContribuciones(){
   } else {
     await sb.from('contribuciones_empresa').insert(payload);
   }
-  const msg=document.getElementById('contrib-msg');
-  msg.style.display='block';
-  msg.innerHTML='<div class="ok">✅ Configuración guardada correctamente.</div>';
-  setTimeout(()=>msg.style.display='none',3000);
+  showToast('✅ Contribuciones guardadas correctamente.');
 }
 
 async function doLogout(){
@@ -1507,10 +1514,11 @@ async function verRecibo(reciboId){
 }
 
 async function aprobarRecibo(reciboId){
-  if(!confirm('¿Aprobás este recibo? El empleado recibirá la notificación.'))return;
+  if(!confirm('¿Aprobás este recibo? El empleado ya lo podrá ver y firmar.'))return;
   await sb.from('recibos').update({estado:'publicado'}).eq('id',reciboId);
   await sb.from('recibo_historial').insert({recibo_id:reciboId,accion:'aprobado',usuario_id:currentUser.id});
   cerrarModal('modal-ver-recibo');
+  showToast('✅ Recibo aprobado correctamente.');
   await cargarRecibosEmpleador();
 }
 
@@ -1529,6 +1537,7 @@ async function confirmarRechazo(){
   await sb.from('recibo_historial').insert({recibo_id:reciboArechazar,accion:'rechazado',usuario_id:currentUser.id,motivo});
   cerrarModal('modal-rechazar');
   reciboArechazar=null;
+  showToast('⚠️ Recibo rechazado. El contador verá el motivo.','warn');
   await cargarRecibosEmpleador();
 }
 
@@ -1542,6 +1551,7 @@ async function confirmarRevocacion(){
   await sb.from('recibo_historial').insert({recibo_id:reciboARevocar,accion:'revocado',usuario_id:currentUser.id,motivo});
   cerrarModal('modal-revocar');
   reciboARevocar=null;
+  showToast('🚫 Recibo revocado correctamente.','warn');
   cargarRecibosContador();
 }
 
@@ -1616,6 +1626,17 @@ async function confirmarFirma(){
   await cargarRecibosEmpleado();
   // Generar y descargar el PDF del recibo recién firmado
   await generarPDFRecibo(reciboId,true);
+}
+
+// ─── TOAST ───
+let toastTimer=null;
+function showToast(msg,tipo='ok',duracion=3000){
+  const t=document.getElementById('toast');
+  if(!t)return;
+  t.textContent=msg;
+  t.className=`toast toast-${tipo} visible`;
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>{t.classList.remove('visible');},duracion);
 }
 
 // ─── SELECCIÓN MÚLTIPLE DE RECIBOS (solo publicados + firmados) ───
