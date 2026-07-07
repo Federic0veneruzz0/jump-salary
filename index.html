@@ -72,6 +72,8 @@ button{font-family:inherit;cursor:pointer;}
 .topbar{background:var(--navy2);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:56px;flex-shrink:0;}
 .topbar-logo{font-size:15px;font-weight:700;letter-spacing:-0.5px;}
 .topbar-logo span{color:var(--gold);}
+#select-empresa-activa{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:20px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer;outline:none;}
+#select-empresa-activa option{background:#1a2e5a;color:#fff;}
 .topbar-info{font-size:12px;color:rgba(255,255,255,.65);margin-left:12px;}
 .topbar-right{display:flex;align-items:center;gap:12px;}
 .topbar-user{font-size:13px;color:rgba(255,255,255,.8);}
@@ -281,7 +283,7 @@ tr:last-child td{border-bottom:none;}
     <div style="display:flex;align-items:center;gap:12px;">
       <div class="topbar-logo">Jump <span>Salary</span></div>
       <div id="topbar-empresa-selector" style="display:none;">
-        <select id="select-empresa-activa" onchange="cambiarEmpresaActiva(this.value)" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;outline:none;">
+        <select id="select-empresa-activa" onchange="cambiarEmpresaActiva(this.value)">
           <option value="">Seleccioná una empresa...</option>
         </select>
       </div>
@@ -1029,8 +1031,8 @@ async function initContador(){
     {icon:'⚙️',label:'Contribuciones',page:'page-contribuciones'},
   ]);
   document.getElementById('page-dashboard').classList.add('active');
+  await cargarSelectEmpresas(); // primero poblar el selector de empresas
   await cargarDashboardContador();
-  await cargarSelectEmpresas();
   setupUploads();
 }
 
