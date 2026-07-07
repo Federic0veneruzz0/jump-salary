@@ -810,21 +810,22 @@ async function iniciarApp(){
 
 // ─── SIDEBAR ───
 function buildSidebar(items){
-  const sb=document.getElementById('sidebar');
-  sb.innerHTML='';
+  const sidebarEl=document.getElementById('sidebar');
+  if(!sidebarEl)return;
+  sidebarEl.innerHTML='';
   items.forEach(item=>{
     if(item.section){
       const sec=document.createElement('div');
       sec.className='sidebar-section';
       sec.textContent=item.section;
-      sb.appendChild(sec);
+      sidebarEl.appendChild(sec);
       return;
     }
     const div=document.createElement('div');
     div.className='sidebar-item'+(item.active?' active':'');
     div.innerHTML=`<span>${item.icon}</span><span>${item.label}</span>`;
     div.addEventListener('click',function(){navTo(item.page,this);});
-    sb.appendChild(div);
+    sidebarEl.appendChild(div);
   });
 }
 
