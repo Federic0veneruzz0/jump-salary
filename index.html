@@ -880,14 +880,13 @@ async function impersonarEstudio(estudioId, estudioNombre){
 
   // Mostrar selector de empresa en topbar
   document.getElementById('topbar-empresa-selector').style.display='block';
-  empresaActivaId=null; // resetear empresa activa al entrar a un nuevo estudio
+  empresaActivaId=null;
 
   // Mostrar botón de volver
   document.getElementById('btn-volver-admin').style.display='inline-block';
 
-  // Actualizar topbar
+  // Actualizar topbar rol
   document.getElementById('topbar-rol').textContent='Contador';
-  document.getElementById('topbar-empresa').textContent=` — ${estudioNombre}`;
 
   // Limpiar páginas activas y cargar panel contador
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
@@ -905,9 +904,8 @@ async function volverAdminPlataforma(){
   document.getElementById('topbar-empresa-selector').style.display='none';
   empresaActivaId=null;
 
-  // Ocultar botón de volver y limpiar topbar
+  // Ocultar botón de volver y restaurar topbar
   document.getElementById('btn-volver-admin').style.display='none';
-  document.getElementById('topbar-empresa').textContent='';
   document.getElementById('topbar-rol').textContent='Admin Plataforma';
 
   // Volver al panel admin
@@ -917,6 +915,7 @@ async function volverAdminPlataforma(){
 
 // ─── ADMIN PLATAFORMA ───
 async function initAdminPlataforma(){
+  document.getElementById('topbar-empresa-selector').style.display='none';
   buildSidebar([
     {section:'Plataforma'},
     {icon:'🏛️',label:'Estudios',page:'page-admin-estudios',active:true},
