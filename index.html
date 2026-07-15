@@ -797,7 +797,7 @@ async function iniciarApp(){
   document.getElementById('app').classList.add('visible');
   document.getElementById('topbar-user').textContent=currentUser.nombre;
 
-  if(currentUser.tipo==='empleador' && currentUser.empleado_id){
+  if(currentUser.empleado_id){
     currentUser.dobleRol=true;
   }
 
@@ -805,8 +805,9 @@ async function iniciarApp(){
   const esAdminPlataforma=currentUser.es_admin===true||currentUser.es_admin==='true';
 
   const roles={contador:'Contador',empleador:'Empleador',empleado:'Empleado'};
-  let rolLabel=currentUser.dobleRol?'Empleador + Empleado':roles[currentUser.tipo]||currentUser.tipo;
-  if(esAdminPlataforma) rolLabel='Admin Plataforma';
+  let rolLabel=roles[currentUser.tipo]||currentUser.tipo;
+  if(currentUser.dobleRol) rolLabel+=' + Empleado';
+  if(esAdminPlataforma) rolLabel=currentUser.dobleRol?'Admin Plataforma + Empleado':'Admin Plataforma';
   document.getElementById('topbar-rol').textContent=rolLabel;
 
   if(esAdminPlataforma) await initAdminPlataforma();
@@ -852,6 +853,7 @@ function navTo(pageId,clickedEl){
   if(pageId==='page-dashboard') cargarDashboardContador();
   if(pageId==='page-empleados') cargarEmpleados();
   if(pageId==='page-contribuciones') cargarContribuciones();
+  if(pageId==='page-empleado-recibos') cargarRecibosEmpleado();
 }
 
 async function cargarEmpleados(){
@@ -919,14 +921,22 @@ async function volverAdminPlataforma(){
 // ─── ADMIN PLATAFORMA ───
 async function initAdminPlataforma(){
   document.getElementById('topbar-empresa-selector').style.display='none';
-  buildSidebar([
+  const sidebarItems=[
     {section:'Plataforma'},
     {icon:'🏛️',label:'Estudios',page:'page-admin-estudios',active:true},
     {icon:'📊',label:'Métricas',page:'page-admin-metricas'},
-  ]);
+  ];
+  if(currentUser.dobleRol){
+    sidebarItems.push({section:'Mis recibos'});
+    sidebarItems.push({icon:'📄',label:'Mis recibos',page:'page-empleado-recibos'});
+  }
+  buildSidebar(sidebarItems);
   document.getElementById('page-admin-estudios').classList.add('active');
   await cargarEstudios();
   await cargarMetricasAdmin();
+  if(currentUser.dobleRol){
+    await cargarRecibosEmpleado();
+  }
 }
 
 async function cargarEstudios(){
@@ -1022,7 +1032,7 @@ async function crearEstudio(){
 
 // ─── CONTADOR ───
 async function initContador(){
-  buildSidebar([
+  const sidebarItems=[
     {section:'General'},
     {icon:'🏠',label:'Panel',page:'page-dashboard',active:true},
     {icon:'📤',label:'Subir liquidación',page:'page-subir'},
@@ -1030,11 +1040,19 @@ async function initContador(){
     {icon:'👥',label:'Empleados',page:'page-empleados'},
     {icon:'📄',label:'Recibos',page:'page-recibos-contador'},
     {icon:'⚙️',label:'Contribuciones',page:'page-contribuciones'},
-  ]);
+  ];
+  if(currentUser.dobleRol){
+    sidebarItems.push({section:'Mis recibos'});
+    sidebarItems.push({icon:'📄',label:'Mis recibos',page:'page-empleado-recibos'});
+  }
+  buildSidebar(sidebarItems);
   document.getElementById('page-dashboard').classList.add('active');
   await cargarSelectEmpresas(); // primero poblar el selector de empresas
   await cargarDashboardContador();
   setupUploads();
+  if(currentUser.dobleRol){
+    await cargarRecibosEmpleado();
+  }
 }
 
 async function cargarDashboardContador(){
