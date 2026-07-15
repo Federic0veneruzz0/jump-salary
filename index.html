@@ -1256,11 +1256,15 @@ async function importarARCA(){
     const{data:exists}=await sb.from('empleados').select('id').eq('empresa_id',empId).eq('cuil',emp.cuil).single();
     if(exists){
       await sb.from('empleados').update({nombre:emp.nombre,obra_social:emp.obra_social,modalidad:emp.modalidad,puesto:emp.puesto,categoria:emp.categoria,fecha_ingreso:emp.fecha_ingreso||null}).eq('id',exists.id);
+      // Corrige el vínculo si el usuario ya existía pero le faltaba empleado_id (bug de versiones anteriores)
+      await sb.from('usuarios').update({empleado_id:exists.id}).eq('cuit_cuil',emp.cuil).is('empleado_id',null);
       actualizados++;
     } else {
-      await sb.from('empleados').insert({empresa_id:empId,cuil:emp.cuil,dni:emp.dni,nombre:emp.nombre,obra_social:emp.obra_social,modalidad:emp.modalidad,puesto:emp.puesto,categoria:emp.categoria,fecha_ingreso:emp.fecha_ingreso||null});
-      // Crear usuario empleado
-      await sb.from('usuarios').upsert({tipo:'empleado',empresa_id:empId,cuit_cuil:emp.cuil,nombre:emp.nombre,primer_acceso:true},{onConflict:'cuit_cuil'});
+      const{data:nuevoEmpleado,error:errEmp}=await sb.from('empleados').insert({empresa_id:empId,cuil:emp.cuil,dni:emp.dni,nombre:emp.nombre,obra_social:emp.obra_social,modalidad:emp.modalidad,puesto:emp.puesto,categoria:emp.categoria,fecha_ingreso:emp.fecha_ingreso||null}).select('id').single();
+      // Crear usuario empleado, vinculado a su registro de empleado
+      if(!errEmp&&nuevoEmpleado){
+        await sb.from('usuarios').upsert({tipo:'empleado',empresa_id:empId,empleado_id:nuevoEmpleado.id,cuit_cuil:emp.cuil,nombre:emp.nombre,primer_acceso:true},{onConflict:'cuit_cuil'});
+      }
       creados++;
     }
   }
