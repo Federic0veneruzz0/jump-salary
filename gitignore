@@ -1,0 +1,7 @@
+# Archivos de datos personales / sensibles de ARCA - nunca deben subirse al repo
+ConsRelLab*.txt
+*.txt
+
+# Archivos de sistema comunes
+.DS_Store
+Thumbs.db
