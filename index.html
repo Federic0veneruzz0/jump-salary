@@ -393,6 +393,9 @@ tr:last-child td{border-bottom:none;}
               <option value="publicado">Publicado</option>
               <option value="revocado">Revocado</option>
             </select>
+            <select id="filtro-periodo-rec" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" onchange="cargarRecibosContador()">
+              <option value="">Todos los períodos</option>
+            </select>
           </div>
         </div>
         <div id="tabla-recibos-contador"><div class="loading">Cargando...</div></div>
@@ -1175,15 +1178,36 @@ async function crearCliente(){
 
 async function cargarRecibosContador(){
   const estado=document.getElementById('filtro-estado-rec')?.value;
+  const selPeriodo=document.getElementById('filtro-periodo-rec');
+  const periodoSeleccionado=selPeriodo?.value||'';
   // Filtrar solo por empresas del estudio del contador
   const{data:empresasEstudio}=await sb.from('empresas').select('id').eq('estudio_id',currentUser.estudio_id).eq('activa',true);
   const idsEstudio=empresasEstudio?.map(e=>e.id)||[];
   if(!idsEstudio.length){document.getElementById('tabla-recibos-contador').innerHTML=`<div class="empty"><div class="empty-icon">📄</div><div class="empty-title">Sin recibos todavía</div></div>`;return;}
-  let q=sb.from('recibos').select('*,empleados(nombre,cuil),empresas(nombre)').order('created_at',{ascending:false}).limit(100);
+  let qPeriodos=sb.from('recibos').select('periodo');
+  if(empresaActivaId) qPeriodos=qPeriodos.eq('empresa_id',empresaActivaId);
+  else qPeriodos=qPeriodos.in('empresa_id',idsEstudio);
+  const{data:periodosData}=await qPeriodos;
+  const periodosDisponibles=[...new Set((periodosData||[]).map(p=>p.periodo).filter(Boolean))].sort((a,b)=>b.localeCompare(a));
+  if(selPeriodo){
+    selPeriodo.innerHTML='<option value="">Todos los períodos</option>'+periodosDisponibles.map(p=>`<option value="${p}">${parseMes(p)}</option>`).join('');
+    if(periodosDisponibles.includes(periodoSeleccionado)) selPeriodo.value=periodoSeleccionado;
+  }
+  let q=sb.from('recibos').select('*,empleados(nombre,cuil),empresas(nombre)').limit(100);
   if(empresaActivaId) q=q.eq('empresa_id',empresaActivaId);
   else q=q.in('empresa_id',idsEstudio);
   if(estado)q=q.eq('estado',estado);
-  const{data:recibos}=await q;
+  if(periodoSeleccionado&&periodosDisponibles.includes(periodoSeleccionado))q=q.eq('periodo',periodoSeleccionado);
+  const{data:recibosRaw}=await q;
+  const recibos=(recibosRaw||[]).slice().sort((a,b)=>{
+    const empA=a.empresas?.nombre||'';
+    const empB=b.empresas?.nombre||'';
+    const cmpEmp=empA.localeCompare(empB,'es',{sensitivity:'base'});
+    if(cmpEmp!==0)return cmpEmp;
+    const nomA=a.empleados?.nombre||'';
+    const nomB=b.empleados?.nombre||'';
+    return nomA.localeCompare(nomB,'es',{sensitivity:'base'});
+  });
   const{data:constancias}=recibos?.length?await sb.from('constancias').select('recibo_id,fecha_firma').in('recibo_id',recibos.map(r=>r.id)):{data:[]};
   const firmaPorRecibo={};
   constancias?.forEach(c=>{firmaPorRecibo[c.recibo_id]=c.fecha_firma;});
