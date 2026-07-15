@@ -242,7 +242,7 @@ tr:last-child td{border-bottom:none;}
           <button type="button" onclick="togglePass('new-pass2',this)" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3);">👁</button>
         </div>
       </div>
-      <div class="field"><label>Tu email <span style="font-weight:400;color:var(--text3);">(opcional, para recuperar contraseña)</span></label><input type="email" id="new-email" placeholder="ejemplo@gmail.com"></div>
+      <div class="field"><label>Tu email <span style="font-weight:400;color:var(--text3);">(obligatorio, para poder recuperar tu contraseña)</span></label><input type="email" id="new-email" placeholder="ejemplo@gmail.com"></div>
       <button class="btn btn-gold" onclick="doPrimerAcceso()">Confirmar y continuar</button>
     </div>
     <div id="login-step-recuperar" style="display:none;">
@@ -652,11 +652,10 @@ async function doPrimerAcceso(){
   const emailInput=document.getElementById('new-email').value.trim();
   if(pass.length<8){showErr('primer-err','La contraseña debe tener al menos 8 caracteres.');return;}
   if(pass!==pass2){showErr('primer-err','Las contraseñas no coinciden.');return;}
-  if(emailInput&&!emailInput.includes('@')){showErr('primer-err','Email inválido.');return;}
+  if(!emailInput){showErr('primer-err','El email es obligatorio: lo vamos a usar para que puedas recuperar tu contraseña si la olvidás.');return;}
+  if(!emailInput.includes('@')){showErr('primer-err','Email inválido.');return;}
 
-  // Si no puso email, usamos uno interno basado en el CUIT para Supabase Auth
-  const email=emailInput||`${currentUser.cuit_cuil}@internal.jumpsalary.com.ar`;
-  const emailEsReal=!!emailInput;
+  const email=emailInput;
 
   // Crear usuario en Supabase Auth
   const{data,error}=await sb.auth.signUp({email,password:pass});
@@ -664,7 +663,7 @@ async function doPrimerAcceso(){
 
   // Actualizar tabla usuarios
   await sb.from('usuarios').update({
-    email:emailEsReal?email:null,
+    email,
     primer_acceso:false,
     auth_id:data.user?.id
   }).eq('id',currentUser.id);
@@ -673,15 +672,13 @@ async function doPrimerAcceso(){
   const{error:loginErr}=await sb.auth.signInWithPassword({email,password:pass});
   if(loginErr){
     // Si Supabase requiere verificación, igual dejamos entrar vía nuestra tabla
-    currentUser={...currentUser,email:emailEsReal?email:null,primer_acceso:false};
+    currentUser={...currentUser,email,primer_acceso:false};
     iniciarApp();
     return;
   }
 
-  currentUser={...currentUser,email:emailEsReal?email:null,primer_acceso:false};
-  if(emailEsReal){
-    alert('¡Listo! Ya podés usar la app. Te recomendamos verificar tu email ('+email+') para poder recuperar tu contraseña si la olvidás.');
-  }
+  currentUser={...currentUser,email,primer_acceso:false};
+  alert('¡Listo! Ya podés usar la app. Te recomendamos verificar tu email ('+email+') para poder recuperar tu contraseña si la olvidás.');
   iniciarApp();
 }
 
@@ -1274,12 +1271,24 @@ async function importarARCA(){
 async function cargarTablaEmpleados(empId){
   const{data:empleados}=await sb.from('empleados').select('*').eq('empresa_id',empId).eq('activo',true).order('nombre');
   if(!empleados?.length){document.getElementById('tabla-empleados').innerHTML=`<div class="empty"><div class="empty-icon">👥</div><div class="empty-title">Sin empleados</div><div class="empty-sub">Importalos desde ARCA.</div></div>`;return;}
-  let html=`<table><thead><tr><th>Nombre</th><th>CUIL</th><th>Categoría</th><th>Ingreso</th><th>Email</th></tr></thead><tbody>`;
+  let html=`<table><thead><tr><th>Nombre</th><th>CUIL</th><th>Categoría</th><th>Ingreso</th><th>Email</th><th>Acceso</th></tr></thead><tbody>`;
   empleados.forEach(e=>{
-    html+=`<tr><td><strong>${e.nombre}</strong></td><td>${fc(e.cuil)}</td><td>${e.categoria||'—'}</td><td>${e.fecha_ingreso||'—'}</td><td>${e.email||'<span style="color:var(--text3)">Sin email</span>'}</td></tr>`;
+    html+=`<tr><td><strong>${e.nombre}</strong></td><td>${fc(e.cuil)}</td><td>${e.categoria||'—'}</td><td>${e.fecha_ingreso||'—'}</td><td>${e.email||'<span style="color:var(--text3)">Sin email</span>'}</td><td><button class="btn-sm btn-outline" onclick="resetearAccesoEmpleado('${e.id}','${(e.nombre||'').replace(/'/g,"\\'")}')">Resetear acceso</button></td></tr>`;
   });
   html+=`</tbody></table>`;
   document.getElementById('tabla-empleados').innerHTML=html;
+}
+
+async function resetearAccesoEmpleado(empleadoId,nombre){
+  const confirmado=confirm(
+    `¿Resetear el acceso de ${nombre}?\n\n`+
+    `Va a poder volver a entrar con su CUIL y su DNI (8 números del medio) como contraseña, y crear una clave nueva.\n\n`+
+    `⚠️ Si antes ya había puesto un email real y quiere volver a usar ESE MISMO email al crear la clave nueva, puede fallar por quedar duplicado. Si eso pasa, avisame para resolverlo desde Supabase.`
+  );
+  if(!confirmado)return;
+  const{error}=await sb.from('usuarios').update({primer_acceso:true,email:null,auth_id:null}).eq('empleado_id',empleadoId);
+  if(error){alert('No se pudo resetear: '+error.message);return;}
+  alert(`Listo. ${nombre} ya puede volver a entrar con su CUIL y DNI para crear una contraseña nueva.`);
 }
 
 // ─── PROCESAR XLS ───
