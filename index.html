@@ -1316,11 +1316,25 @@ async function procesarXLS(){
   const mapCuil={};
   empleados?.forEach(e=>mapCuil[nc(e.cuil)]=e);
 
-  let ok=0,skip=0,sinEmpleado=[];
+  let ok=0,skip=0,creados=0,sinEmpleado=[];
   for(const rec of xlsData){
     const cuil=nc(rec.CUIL||'');
-    const empleado=mapCuil[cuil];
-    if(!empleado){sinEmpleado.push(rec.Empleado||cuil);continue;}
+    let empleado=mapCuil[cuil];
+
+    if(!empleado){
+      if(!cuil||cuil.length!==11){sinEmpleado.push(rec.Empleado||cuil);continue;}
+      // Empleado no está en el sistema (ej: dado de baja antes de usar Jump Salary):
+      // se crea automáticamente como inactivo, con acceso para ver/firmar sus recibos.
+      const dniDerivado=cuil.substring(2,10);
+      const{data:nuevoEmpleado,error:errEmp}=await sb.from('empleados')
+        .insert({empresa_id:empId,cuil,dni:dniDerivado,nombre:rec.Empleado||cuil,activo:false})
+        .select('id,cuil,nombre').single();
+      if(errEmp||!nuevoEmpleado){sinEmpleado.push(rec.Empleado||cuil);continue;}
+      await sb.from('usuarios').upsert({tipo:'empleado',empresa_id:empId,empleado_id:nuevoEmpleado.id,cuit_cuil:cuil,nombre:rec.Empleado||cuil,primer_acceso:true},{onConflict:'cuit_cuil'});
+      empleado=nuevoEmpleado;
+      mapCuil[cuil]=empleado;
+      creados++;
+    }
 
     const payload={
       empresa_id:empId,empleado_id:empleado.id,
@@ -1341,7 +1355,8 @@ async function procesarXLS(){
   }
 
   let msg=`✅ ${ok} recibos guardados como borrador.`;
-  if(sinEmpleado.length)msg+=`\n⚠️ ${sinEmpleado.length} sin empleado en el sistema: ${sinEmpleado.slice(0,3).join(', ')}${sinEmpleado.length>3?'...':''}`;
+  if(creados)msg+=`\n👤 ${creados} empleado(s) dado(s) de baja creado(s) automáticamente (inactivos, con acceso para ver/firmar).`;
+  if(sinEmpleado.length)msg+=`\n⚠️ ${sinEmpleado.length} sin CUIL válido, no se pudieron crear: ${sinEmpleado.slice(0,3).join(', ')}${sinEmpleado.length>3?'...':''}`;
   if(skip)msg+=`\n🔒 ${skip} no modificados (ya estaban publicados o revocados).`;
   alert(msg);
 }
