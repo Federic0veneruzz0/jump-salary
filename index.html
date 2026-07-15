@@ -1927,9 +1927,8 @@ function setupUploads(){
 }
 
 function verEmpresa(empId){
-  document.getElementById('filtro-empresa-rec').value=empId;
+  empresaActivaId=empId;
   navTo('page-recibos-contador',document.querySelectorAll('.sidebar-item')[3]||null);
-  cargarRecibosContador();
 }
 
 // ─── INIT ───
