@@ -1269,6 +1269,18 @@ async function importarARCA(){
   if(!empId){alert('Seleccioná una empresa en el panel superior primero.');return;}
   if(!arcaData){alert('Subí el archivo ConsRelLab.txt primero.');return;}
 
+  const btn=document.querySelector('button[onclick="importarARCA()"]');
+  const btnTextoOriginal=btn?.textContent;
+  if(btn){btn.disabled=true;btn.textContent='Procesando... no cierres esta pantalla';btn.style.opacity='0.7';}
+
+  try{
+    await importarARCAInterno(empId);
+  } finally {
+    if(btn){btn.disabled=false;btn.textContent=btnTextoOriginal;btn.style.opacity='1';}
+  }
+}
+
+async function importarARCAInterno(empId){
   let creados=0,actualizados=0,conflictos=[];
   for(const emp of arcaData){
     const{data:exists}=await sb.from('empleados').select('id').eq('empresa_id',empId).eq('cuil',emp.cuil).single();
@@ -1300,9 +1312,19 @@ async function importarARCA(){
 async function cargarTablaEmpleados(empId){
   const{data:empleados}=await sb.from('empleados').select('*').eq('empresa_id',empId).eq('activo',true).order('nombre');
   if(!empleados?.length){document.getElementById('tabla-empleados').innerHTML=`<div class="empty"><div class="empty-icon">👥</div><div class="empty-title">Sin empleados</div><div class="empty-sub">Importalos desde ARCA.</div></div>`;return;}
-  let html=`<table><thead><tr><th>Nombre</th><th>CUIL</th><th>Categoría</th><th>Ingreso</th><th>Email</th><th>Acceso</th></tr></thead><tbody>`;
+  const cuils=empleados.map(e=>nc(e.cuil));
+  const{data:usuariosData}=await sb.from('usuarios').select('cuit_cuil,email,primer_acceso').in('cuit_cuil',cuils);
+  const mapUsuarios={};
+  usuariosData?.forEach(u=>mapUsuarios[nc(u.cuit_cuil)]=u);
+  let html=`<table><thead><tr><th>Nombre</th><th>CUIL</th><th>Categoría</th><th>Ingreso</th><th>Acceso</th><th></th></tr></thead><tbody>`;
   empleados.forEach(e=>{
-    html+=`<tr><td><strong>${e.nombre}</strong></td><td>${fc(e.cuil)}</td><td>${e.categoria||'—'}</td><td>${e.fecha_ingreso||'—'}</td><td>${e.email||'<span style="color:var(--text3)">Sin email</span>'}</td><td><button class="btn-sm btn-outline" onclick="resetearAccesoEmpleado('${e.id}','${(e.nombre||'').replace(/'/g,"\\'")}')">Resetear acceso</button></td></tr>`;
+    const u=mapUsuarios[nc(e.cuil)];
+    let estadoAcceso;
+    if(!u){estadoAcceso='<span style="color:var(--text3)">Sin cuenta creada</span>';}
+    else if(u.primer_acceso){estadoAcceso='<span style="color:var(--text3)">Aún no ingresó (primer acceso pendiente)</span>';}
+    else if(u.email){estadoAcceso=u.email;}
+    else{estadoAcceso='<span style="color:var(--text3)">Sin email de recuperación</span>';}
+    html+=`<tr><td><strong>${e.nombre}</strong></td><td>${fc(e.cuil)}</td><td>${e.categoria||'—'}</td><td>${e.fecha_ingreso||'—'}</td><td>${estadoAcceso}</td><td><button class="btn-sm btn-outline" onclick="resetearAccesoEmpleado('${e.id}','${(e.nombre||'').replace(/'/g,"\\'")}')">Resetear acceso</button></td></tr>`;
   });
   html+=`</tbody></table>`;
   document.getElementById('tabla-empleados').innerHTML=html;
