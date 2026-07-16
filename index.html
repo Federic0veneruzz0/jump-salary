@@ -1326,6 +1326,19 @@ async function procesarXLS(){
   if(!empId){alert('Seleccioná una empresa en el panel superior primero.');return;}
   if(!xlsData){alert('Subí el archivo .xls primero.');return;}
 
+  const btn=document.querySelector('button[onclick="procesarXLS()"]');
+  const btnTextoOriginal=btn?.textContent;
+  if(btn){btn.disabled=true;btn.textContent='Procesando... no cierres esta pantalla';btn.style.opacity='0.7';}
+
+  try{
+    await procesarXLSInterno(empId);
+  } finally {
+    if(btn){btn.disabled=false;btn.textContent=btnTextoOriginal;btn.style.opacity='1';}
+  }
+}
+
+async function procesarXLSInterno(empId){
+
   // Detectar período del archivo
   const periodos=[...new Set(xlsData.map(r=>r.Período||'').filter(Boolean))];
   
@@ -1337,7 +1350,8 @@ async function procesarXLS(){
       .in('periodo',periodos);
     
     if(existentes?.length>0){
-      const empresa=document.getElementById('select-empresa').options[document.getElementById('select-empresa').selectedIndex].text;
+      const selEmp=document.getElementById('select-empresa-activa');
+      const empresa=(selEmp&&selEmp.selectedIndex>=0)?selEmp.options[selEmp.selectedIndex].text:'esta empresa';
       const periodosStr=periodos.join(', ');
       const estados=[...new Set(existentes.map(r=>r.estado))].join(', ');
       const confirmado=confirm(
@@ -1354,7 +1368,7 @@ async function procesarXLS(){
   const mapCuil={};
   empleados?.forEach(e=>mapCuil[nc(e.cuil)]=e);
 
-  let ok=0,skip=0,creados=0,sinEmpleado=[],conflictosUsuario=[];
+  let ok=0,skip=0,creados=0,sinEmpleado=[],conflictosUsuario=[],actualizadosConCambio=[];
   for(const rec of xlsData){
     const cuil=nc(rec.CUIL||'');
     let empleado=mapCuil[cuil];
@@ -1390,8 +1404,11 @@ async function procesarXLS(){
     };
 
     // No pisar recibos ya publicados o firmados
-    const{data:existente}=await sb.from('recibos').select('id,estado').eq('empresa_id',empId).eq('empleado_id',empleado.id).eq('periodo',payload.periodo).eq('tipo',payload.tipo).maybeSingle();
+    const{data:existente}=await sb.from('recibos').select('id,estado,neto').eq('empresa_id',empId).eq('empleado_id',empleado.id).eq('periodo',payload.periodo).eq('tipo',payload.tipo).maybeSingle();
     if(existente&&(existente.estado==='publicado'||existente.estado==='revocado')){skip++;continue;}
+    if(existente&&existente.neto!==payload.neto){
+      actualizadosConCambio.push(`${empleado.nombre||cuil} (${payload.periodo} ${payload.tipo}): $${existente.neto} → $${payload.neto}`);
+    }
 
     const{error}=await sb.from('recibos').upsert(payload,{onConflict:'empresa_id,empleado_id,periodo,tipo'});
     if(!error)ok++;else skip++;
@@ -1400,6 +1417,7 @@ async function procesarXLS(){
   let msg=`✅ ${ok} recibos guardados como borrador.`;
   if(creados)msg+=`\n👤 ${creados} empleado(s) dado(s) de baja creado(s) automáticamente (inactivos, con acceso para ver/firmar).`;
   if(conflictosUsuario.length)msg+=`\n⚠️ ${conflictosUsuario.length} con CUIL ya registrado en otra empresa (se creó el recibo pero NO se tocó su acceso de login, revisá manualmente): ${conflictosUsuario.slice(0,5).join(', ')}${conflictosUsuario.length>5?'...':''}`;
+  if(actualizadosConCambio.length)msg+=`\n✏️ ${actualizadosConCambio.length} borrador(es) existente(s) actualizados con un neto distinto:\n${actualizadosConCambio.slice(0,5).join('\n')}${actualizadosConCambio.length>5?'\n...':''}`;
   if(sinEmpleado.length)msg+=`\n⚠️ ${sinEmpleado.length} sin CUIL válido, no se pudieron crear: ${sinEmpleado.slice(0,3).join(', ')}${sinEmpleado.length>3?'...':''}`;
   if(skip)msg+=`\n🔒 ${skip} no modificados (ya estaban publicados o revocados).`;
   alert(msg);
