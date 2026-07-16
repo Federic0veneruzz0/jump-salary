@@ -1706,13 +1706,21 @@ async function verRecibo(reciboId){
   abrirModal('modal-ver-recibo');
 }
 
+async function refrescarVistaRecibos(){
+  const paginaActiva=document.querySelector('.page.active');
+  const pageId=paginaActiva?.id;
+  if(pageId==='page-recibos-contador') await cargarRecibosContador();
+  else if(pageId==='page-empleador-dashboard') await cargarRecibosEmpleador();
+  else if(pageId==='page-empleado-recibos') await cargarRecibosEmpleado();
+}
+
 async function aprobarRecibo(reciboId){
   if(!confirm('¿Aprobás este recibo? El empleado ya lo podrá ver y firmar.'))return;
   await sb.from('recibos').update({estado:'publicado'}).eq('id',reciboId);
   await sb.from('recibo_historial').insert({recibo_id:reciboId,accion:'aprobado',usuario_id:currentUser.id});
   cerrarModal('modal-ver-recibo');
   showToast('✅ Recibo aprobado correctamente.');
-  await cargarRecibosEmpleador();
+  await refrescarVistaRecibos();
 }
 
 // ─── RECHAZAR RECIBO (empleador) ───
@@ -1731,7 +1739,7 @@ async function confirmarRechazo(){
   cerrarModal('modal-rechazar');
   reciboArechazar=null;
   showToast('⚠️ Recibo rechazado. El contador verá el motivo.','warn');
-  await cargarRecibosEmpleador();
+  await refrescarVistaRecibos();
 }
 
 // ─── REVOCAR ───
@@ -2049,8 +2057,14 @@ function setupUploads(){
   });
 }
 
-function verEmpresa(empId){
+async function verEmpresa(empId){
+  const sel=document.getElementById('select-empresa-activa');
+  if(sel) sel.value=empId;
   empresaActivaId=empId;
+  ['select-empresa','select-empresa-empl','filtro-empresa-rec','select-empresa-contrib'].forEach(id=>{
+    const s=document.getElementById(id);
+    if(s) s.value=empId;
+  });
   navTo('page-recibos-contador',document.querySelectorAll('.sidebar-item')[3]||null);
 }
 
