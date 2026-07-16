@@ -377,7 +377,13 @@ tr:last-child td{border-bottom:none;}
           <button class="btn btn-primary" onclick="importarARCA()" style="width:auto;padding:10px 24px;">Importar empleados</button>
         </div>
         <div class="card">
-          <div class="card-title">Nómina</div>
+          <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+            <span>Nómina</span>
+            <label style="font-size:13px;font-weight:400;display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="checkbox" id="chk-ver-inactivos" onchange="cargarTablaEmpleados(empresaActivaId)">
+              Mostrar también inactivos / dados de baja
+            </label>
+          </div>
           <div id="tabla-empleados"><div class="loading">Seleccioná una empresa para ver sus empleados.</div></div>
         </div>
       </div>
@@ -563,7 +569,9 @@ tr:last-child td{border-bottom:none;}
 // ─── CONFIG SUPABASE ───
 const SUPABASE_URL = 'https://meowljfofnfdfnumlaog.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_e7E8ZuQS39yXvVd2m9D8ZQ_fNYI-JDD';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storage: window.localStorage }
+});
 
 // ─── ESTADO GLOBAL ───
 let currentUser = null;
@@ -1310,7 +1318,10 @@ async function importarARCAInterno(empId){
 }
 
 async function cargarTablaEmpleados(empId){
-  const{data:empleados}=await sb.from('empleados').select('*').eq('empresa_id',empId).eq('activo',true).order('nombre');
+  const verInactivos=document.getElementById('chk-ver-inactivos')?.checked;
+  let q=sb.from('empleados').select('*').eq('empresa_id',empId).order('nombre');
+  if(!verInactivos) q=q.eq('activo',true);
+  const{data:empleados}=await q;
   if(!empleados?.length){document.getElementById('tabla-empleados').innerHTML=`<div class="empty"><div class="empty-icon">👥</div><div class="empty-title">Sin empleados</div><div class="empty-sub">Importalos desde ARCA.</div></div>`;return;}
   const cuils=empleados.map(e=>nc(e.cuil));
   const{data:usuariosData}=await sb.from('usuarios').select('cuit_cuil,email,primer_acceso').in('cuit_cuil',cuils);
@@ -1324,7 +1335,7 @@ async function cargarTablaEmpleados(empId){
     else if(u.primer_acceso){estadoAcceso='<span style="color:var(--text3)">Aún no ingresó (primer acceso pendiente)</span>';}
     else if(u.email){estadoAcceso=u.email;}
     else{estadoAcceso='<span style="color:var(--text3)">Sin email de recuperación</span>';}
-    html+=`<tr><td><strong>${e.nombre}</strong></td><td>${fc(e.cuil)}</td><td>${e.categoria||'—'}</td><td>${e.fecha_ingreso||'—'}</td><td>${estadoAcceso}</td><td><button class="btn-sm btn-outline" onclick="resetearAccesoEmpleado('${e.id}','${(e.nombre||'').replace(/'/g,"\\'")}')">Resetear acceso</button></td></tr>`;
+    html+=`<tr><td><strong>${e.nombre}</strong>${!e.activo?' <span style="font-size:11px;color:var(--text3);font-weight:400;">(dado de baja)</span>':''}</td><td>${fc(e.cuil)}</td><td>${e.categoria||'—'}</td><td>${e.fecha_ingreso||'—'}</td><td>${estadoAcceso}</td><td><button class="btn-sm btn-outline" onclick="resetearAccesoEmpleado('${e.id}','${(e.nombre||'').replace(/'/g,"\\'")}')">Resetear acceso</button></td></tr>`;
   });
   html+=`</tbody></table>`;
   document.getElementById('tabla-empleados').innerHTML=html;
@@ -1397,11 +1408,11 @@ async function procesarXLSInterno(empId){
 
     if(!empleado){
       if(!cuil||cuil.length!==11){sinEmpleado.push(rec.Empleado||cuil);continue;}
-      // Empleado no está en el sistema (ej: dado de baja antes de usar Jump Salary):
-      // se crea automáticamente como inactivo, con acceso para ver/firmar sus recibos.
+      // Empleado no está en el sistema todavía (puede ser alta reciente, falta de página en ARCA, etc.):
+      // se crea automáticamente como activo, con acceso para ver/firmar sus recibos. La baja se marca a mano si corresponde.
       const dniDerivado=cuil.substring(2,10);
       const{data:nuevoEmpleado,error:errEmp}=await sb.from('empleados')
-        .insert({empresa_id:empId,cuil,dni:dniDerivado,nombre:rec.Empleado||cuil,activo:false})
+        .insert({empresa_id:empId,cuil,dni:dniDerivado,nombre:rec.Empleado||cuil,activo:true})
         .select('id,cuil,nombre').single();
       if(errEmp||!nuevoEmpleado){sinEmpleado.push(rec.Empleado||cuil);continue;}
       const{data:usuarioExistente}=await sb.from('usuarios').select('id,empresa_id').eq('cuit_cuil',cuil).maybeSingle();
@@ -1437,7 +1448,7 @@ async function procesarXLSInterno(empId){
   }
 
   let msg=`✅ ${ok} recibos guardados como borrador.`;
-  if(creados)msg+=`\n👤 ${creados} empleado(s) dado(s) de baja creado(s) automáticamente (inactivos, con acceso para ver/firmar).`;
+  if(creados)msg+=`\n👤 ${creados} empleado(s) nuevo(s) creado(s) automáticamente (activos, con acceso para ver/firmar). Si alguno ya no trabaja ahí, desactivalo a mano en "Empleados".`;
   if(conflictosUsuario.length)msg+=`\n⚠️ ${conflictosUsuario.length} con CUIL ya registrado en otra empresa (se creó el recibo pero NO se tocó su acceso de login, revisá manualmente): ${conflictosUsuario.slice(0,5).join(', ')}${conflictosUsuario.length>5?'...':''}`;
   if(actualizadosConCambio.length)msg+=`\n✏️ ${actualizadosConCambio.length} borrador(es) existente(s) actualizados con un neto distinto:\n${actualizadosConCambio.slice(0,5).join('\n')}${actualizadosConCambio.length>5?'\n...':''}`;
   if(sinEmpleado.length)msg+=`\n⚠️ ${sinEmpleado.length} sin CUIL válido, no se pudieron crear: ${sinEmpleado.slice(0,3).join(', ')}${sinEmpleado.length>3?'...':''}`;
@@ -2076,10 +2087,17 @@ window.addEventListener('DOMContentLoaded',async()=>{
     document.getElementById('login-step-nueva-clave').style.display='block';
     return;
   }
-  const{data:{session}}=await sb.auth.getSession();
+  const{data:{session},error:errSesion}=await sb.auth.getSession();
+  if(errSesion) console.error('Error al restaurar sesión:',errSesion);
   if(session){
-    const{data:usuario}=await sb.from('usuarios').select('*').eq('auth_id',session.user.id).single();
+    const{data:usuario,error:errUsuario}=await sb.from('usuarios').select('*').eq('auth_id',session.user.id).maybeSingle();
+    if(errUsuario) console.error('Error al buscar el usuario de la sesión:',errUsuario);
     if(usuario){currentUser=usuario;iniciarApp();return;}
+    // La sesión de Auth existe pero no coincide con ningún usuario (auth_id desactualizado): la limpiamos.
+    console.warn('Sesión válida pero sin usuario vinculado (auth_id desactualizado). Cerrando sesión para permitir un login limpio.');
+    await sb.auth.signOut();
+  } else {
+    console.log('No había sesión guardada al cargar la página.');
   }
 });
 </script>
