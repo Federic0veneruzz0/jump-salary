@@ -1208,7 +1208,7 @@ async function cargarRecibosContador(){
     selPeriodo.innerHTML='<option value="">Todos los períodos</option>'+periodosDisponibles.map(p=>`<option value="${p}">${parseMes(p)}</option>`).join('');
     if(periodosDisponibles.includes(periodoSeleccionado)) selPeriodo.value=periodoSeleccionado;
   }
-  let q=sb.from('recibos').select('*,empleados(nombre,cuil),empresas(nombre)').limit(100);
+  let q=sb.from('recibos').select('*,empleados(nombre,cuil),empresas(nombre)').limit(3000);
   if(empresaActivaId) q=q.eq('empresa_id',empresaActivaId);
   else q=q.in('empresa_id',idsEstudio);
   if(estado)q=q.eq('estado',estado);
