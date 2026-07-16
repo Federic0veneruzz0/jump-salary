@@ -797,7 +797,7 @@ async function iniciarApp(){
   document.getElementById('app').classList.add('visible');
   document.getElementById('topbar-user').textContent=currentUser.nombre;
 
-  if(currentUser.empleado_id){
+  if(currentUser.empleado_id && currentUser.tipo!=='empleado'){
     currentUser.dobleRol=true;
   }
 
@@ -1269,7 +1269,7 @@ async function importarARCA(){
   if(!empId){alert('Seleccioná una empresa en el panel superior primero.');return;}
   if(!arcaData){alert('Subí el archivo ConsRelLab.txt primero.');return;}
 
-  let creados=0,actualizados=0;
+  let creados=0,actualizados=0,conflictos=[];
   for(const emp of arcaData){
     const{data:exists}=await sb.from('empleados').select('id').eq('empresa_id',empId).eq('cuil',emp.cuil).single();
     if(exists){
@@ -1279,14 +1279,21 @@ async function importarARCA(){
       actualizados++;
     } else {
       const{data:nuevoEmpleado,error:errEmp}=await sb.from('empleados').insert({empresa_id:empId,cuil:emp.cuil,dni:emp.dni,nombre:emp.nombre,obra_social:emp.obra_social,modalidad:emp.modalidad,puesto:emp.puesto,categoria:emp.categoria,fecha_ingreso:emp.fecha_ingreso||null}).select('id').single();
-      // Crear usuario empleado, vinculado a su registro de empleado
       if(!errEmp&&nuevoEmpleado){
-        await sb.from('usuarios').upsert({tipo:'empleado',empresa_id:empId,empleado_id:nuevoEmpleado.id,cuit_cuil:emp.cuil,nombre:emp.nombre,primer_acceso:true},{onConflict:'cuit_cuil'});
+        // Si el CUIL ya tiene una cuenta de usuario (de otra empresa), NO se la pisa en silencio.
+        const{data:usuarioExistente}=await sb.from('usuarios').select('id,empresa_id,empleado_id').eq('cuit_cuil',emp.cuil).maybeSingle();
+        if(usuarioExistente&&usuarioExistente.empresa_id!==empId){
+          conflictos.push(emp.nombre||emp.cuil);
+        } else if(!usuarioExistente){
+          await sb.from('usuarios').insert({tipo:'empleado',empresa_id:empId,empleado_id:nuevoEmpleado.id,cuit_cuil:emp.cuil,nombre:emp.nombre,primer_acceso:true});
+        }
       }
       creados++;
     }
   }
-  alert(`✅ Importación completa: ${creados} empleados creados, ${actualizados} actualizados.`);
+  let msg=`✅ Importación completa: ${creados} empleados creados, ${actualizados} actualizados.`;
+  if(conflictos.length)msg+=`\n\n⚠️ ${conflictos.length} con CUIL ya registrado en otra empresa (no se tocó su acceso, revisá si es un dato de prueba o doble empleo real): ${conflictos.slice(0,5).join(', ')}${conflictos.length>5?'...':''}`;
+  alert(msg);
   cargarTablaEmpleados(empId);
 }
 
@@ -1347,7 +1354,7 @@ async function procesarXLS(){
   const mapCuil={};
   empleados?.forEach(e=>mapCuil[nc(e.cuil)]=e);
 
-  let ok=0,skip=0,creados=0,sinEmpleado=[];
+  let ok=0,skip=0,creados=0,sinEmpleado=[],conflictosUsuario=[];
   for(const rec of xlsData){
     const cuil=nc(rec.CUIL||'');
     let empleado=mapCuil[cuil];
@@ -1361,7 +1368,12 @@ async function procesarXLS(){
         .insert({empresa_id:empId,cuil,dni:dniDerivado,nombre:rec.Empleado||cuil,activo:false})
         .select('id,cuil,nombre').single();
       if(errEmp||!nuevoEmpleado){sinEmpleado.push(rec.Empleado||cuil);continue;}
-      await sb.from('usuarios').upsert({tipo:'empleado',empresa_id:empId,empleado_id:nuevoEmpleado.id,cuit_cuil:cuil,nombre:rec.Empleado||cuil,primer_acceso:true},{onConflict:'cuit_cuil'});
+      const{data:usuarioExistente}=await sb.from('usuarios').select('id,empresa_id').eq('cuit_cuil',cuil).maybeSingle();
+      if(usuarioExistente&&usuarioExistente.empresa_id!==empId){
+        conflictosUsuario.push(rec.Empleado||cuil);
+      } else if(!usuarioExistente){
+        await sb.from('usuarios').insert({tipo:'empleado',empresa_id:empId,empleado_id:nuevoEmpleado.id,cuit_cuil:cuil,nombre:rec.Empleado||cuil,primer_acceso:true});
+      }
       empleado=nuevoEmpleado;
       mapCuil[cuil]=empleado;
       creados++;
@@ -1387,6 +1399,7 @@ async function procesarXLS(){
 
   let msg=`✅ ${ok} recibos guardados como borrador.`;
   if(creados)msg+=`\n👤 ${creados} empleado(s) dado(s) de baja creado(s) automáticamente (inactivos, con acceso para ver/firmar).`;
+  if(conflictosUsuario.length)msg+=`\n⚠️ ${conflictosUsuario.length} con CUIL ya registrado en otra empresa (se creó el recibo pero NO se tocó su acceso de login, revisá manualmente): ${conflictosUsuario.slice(0,5).join(', ')}${conflictosUsuario.length>5?'...':''}`;
   if(sinEmpleado.length)msg+=`\n⚠️ ${sinEmpleado.length} sin CUIL válido, no se pudieron crear: ${sinEmpleado.slice(0,3).join(', ')}${sinEmpleado.length>3?'...':''}`;
   if(skip)msg+=`\n🔒 ${skip} no modificados (ya estaban publicados o revocados).`;
   alert(msg);
