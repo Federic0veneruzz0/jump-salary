@@ -1401,7 +1401,7 @@ async function procesarXLSInterno(empId){
   const mapCuil={};
   empleados?.forEach(e=>mapCuil[nc(e.cuil)]=e);
 
-  let ok=0,skip=0,creados=0,sinEmpleado=[],conflictosUsuario=[],actualizadosConCambio=[];
+  let ok=0,skip=0,creados=0,sinEmpleado=[],conflictosUsuario=[],actualizadosConCambio=[],revocadosReemplazados=[],revocadosBloqueados=[];
   for(const rec of xlsData){
     const cuil=nc(rec.CUIL||'');
     let empleado=mapCuil[cuil];
@@ -1436,21 +1436,36 @@ async function procesarXLSInterno(empId){
       datos_json:rec,estado:'borrador',
     };
 
-    // No pisar recibos ya publicados o firmados
+    // No pisar recibos ya publicados/firmados. Los revocados los puede reemplazar cualquier contador (empresas/empleados no llegan a esta pantalla).
+    const puedeReemplazarRevocados=currentUser.tipo==='contador'||currentUser.es_admin===true||currentUser.es_admin==='true'||adminOriginal!==null;
     const{data:existente}=await sb.from('recibos').select('id,estado,neto').eq('empresa_id',empId).eq('empleado_id',empleado.id).eq('periodo',payload.periodo).eq('tipo',payload.tipo).maybeSingle();
-    if(existente&&(existente.estado==='publicado'||existente.estado==='revocado')){skip++;continue;}
-    if(existente&&existente.neto!==payload.neto){
+    if(existente&&existente.estado==='publicado'){skip++;continue;}
+    if(existente&&existente.estado==='revocado'&&!puedeReemplazarRevocados){
+      revocadosBloqueados.push(`${empleado.nombre||cuil} (${payload.periodo} ${payload.tipo})`);
+      continue;
+    }
+    if(existente&&existente.estado==='revocado'){
+      revocadosReemplazados.push(`${empleado.nombre||cuil} (${payload.periodo} ${payload.tipo})`);
+    }
+    if(existente&&existente.estado!=='revocado'&&existente.neto!==payload.neto){
       actualizadosConCambio.push(`${empleado.nombre||cuil} (${payload.periodo} ${payload.tipo}): $${existente.neto} → $${payload.neto}`);
     }
 
-    const{error}=await sb.from('recibos').upsert(payload,{onConflict:'empresa_id,empleado_id,periodo,tipo'});
-    if(!error)ok++;else skip++;
+    const{data:recSubido,error}=await sb.from('recibos').upsert(payload,{onConflict:'empresa_id,empleado_id,periodo,tipo'}).select('id').single();
+    if(!error){
+      ok++;
+      if(existente&&existente.estado==='revocado'){
+        await sb.from('recibo_historial').insert({recibo_id:recSubido.id,accion:'reemplazado_tras_revocacion',usuario_id:currentUser.id,motivo:'Recibo revocado reemplazado por una nueva carga de liquidación.'});
+      }
+    } else skip++;
   }
 
   let msg=`✅ ${ok} recibos guardados como borrador.`;
   if(creados)msg+=`\n👤 ${creados} empleado(s) nuevo(s) creado(s) automáticamente (activos, con acceso para ver/firmar). Si alguno ya no trabaja ahí, desactivalo a mano en "Empleados".`;
   if(conflictosUsuario.length)msg+=`\n⚠️ ${conflictosUsuario.length} con CUIL ya registrado en otra empresa (se creó el recibo pero NO se tocó su acceso de login, revisá manualmente): ${conflictosUsuario.slice(0,5).join(', ')}${conflictosUsuario.length>5?'...':''}`;
   if(actualizadosConCambio.length)msg+=`\n✏️ ${actualizadosConCambio.length} borrador(es) existente(s) actualizados con un neto distinto:\n${actualizadosConCambio.slice(0,5).join('\n')}${actualizadosConCambio.length>5?'\n...':''}`;
+  if(revocadosReemplazados.length)msg+=`\n🔄 ${revocadosReemplazados.length} recibo(s) revocado(s) reemplazados por la versión nueva (vuelven a borrador para aprobar de nuevo):\n${revocadosReemplazados.slice(0,5).join('\n')}${revocadosReemplazados.length>5?'\n...':''}`;
+  if(revocadosBloqueados.length)msg+=`\n🔒 ${revocadosBloqueados.length} recibo(s) revocado(s) NO se tocaron (solo el admin de la plataforma puede reemplazarlos):\n${revocadosBloqueados.slice(0,5).join('\n')}${revocadosBloqueados.length>5?'\n...':''}`;
   if(sinEmpleado.length)msg+=`\n⚠️ ${sinEmpleado.length} sin CUIL válido, no se pudieron crear: ${sinEmpleado.slice(0,3).join(', ')}${sinEmpleado.length>3?'...':''}`;
   if(skip)msg+=`\n🔒 ${skip} no modificados (ya estaban publicados o revocados).`;
   alert(msg);
