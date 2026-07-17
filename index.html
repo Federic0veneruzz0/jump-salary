@@ -452,7 +452,7 @@ tr:last-child td{border-bottom:none;}
         <div class="page-title">Diccionario de conceptos</div>
         <div class="page-sub">Códigos propios de la empresa seleccionada en el panel (tienen prioridad sobre el diccionario genérico)</div>
         <div class="card" style="padding:16px;margin-bottom:16px;">
-          <div style="display:grid;grid-template-columns:100px 1fr 160px 160px 100px;gap:10px;align-items:end;">
+          <div style="display:grid;grid-template-columns:100px 1fr 160px 160px 100px 100px;gap:10px;align-items:end;">
             <div class="field"><label>Código</label><input type="text" id="nc-codigo" placeholder="ej: 55" style="width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);"></div>
             <div class="field"><label>Nombre</label><input type="text" id="nc-nombre" placeholder="ej: Retención sindical" style="width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);"></div>
             <div class="field"><label>Tipo</label>
@@ -469,6 +469,7 @@ tr:last-child td{border-bottom:none;}
                 <option value="fijo">Monto fijo</option>
               </select>
             </div>
+            <div class="field"><label>% (si aplica)</label><input type="number" step="0.01" id="nc-porcentaje" placeholder="ej: 11" style="width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);"></div>
             <button class="btn btn-primary" onclick="agregarConceptoEmpresa()" style="padding:8px 16px;">+ Agregar</button>
           </div>
         </div>
@@ -750,8 +751,9 @@ const CONCEPTOS_DEFAULT = {
 };
 conceptosMap = {...CONCEPTOS_DEFAULT};
 // Marcamos como "Porcentaje" los que ya confirmamos con datos reales del sistema
-['201','202','203','204','205','206','207','209','210','211','221'].forEach(cod=>{
-  if(CONCEPTOS_DEFAULT[cod]) CONCEPTOS_DEFAULT[cod].calculo='pct';
+const PORCENTAJES_CONFIRMADOS={'201':11,'202':3,'203':3,'204':15,'205':3,'206':2,'207':5,'209':2,'210':2,'211':2,'221':3};
+Object.entries(PORCENTAJES_CONFIRMADOS).forEach(([cod,pct])=>{
+  if(CONCEPTOS_DEFAULT[cod]){CONCEPTOS_DEFAULT[cod].calculo='pct';CONCEPTOS_DEFAULT[cod].porcentaje=pct;}
 });
 
 // ─── HELPERS ───
@@ -914,33 +916,34 @@ async function cargarConceptosEmpresa(empId){
 
   // Combinar: primero los propios de la empresa, después los genéricos que no fueron sobreescritos
   const filas=[];
-  Object.entries(mapPropios).forEach(([codigo,c])=>filas.push({codigo,nombre:c.nombre,tipo:c.tipo,calculo:c.calculo,origen:'propio',id:c.id}));
+  Object.entries(mapPropios).forEach(([codigo,c])=>filas.push({codigo,nombre:c.nombre,tipo:c.tipo,calculo:c.calculo,porcentaje:c.porcentaje,origen:'propio',id:c.id}));
   Object.entries(CONCEPTOS_DEFAULT).forEach(([codigo,c])=>{
     if(mapPropios[codigo])return; // ya está sobreescrito por uno propio
-    filas.push({codigo,nombre:c.nombre,tipo:c.tipo,calculo:c.calculo,origen:'generico',id:null});
+    filas.push({codigo,nombre:c.nombre,tipo:c.tipo,calculo:c.calculo,porcentaje:c.porcentaje,origen:'generico',id:null});
   });
   filas.sort((a,b)=>parseInt(a.codigo)-parseInt(b.codigo));
 
   if(!filas.length){cont.innerHTML=`<div class="empty"><div class="empty-icon">🔢</div><div class="empty-title">Sin conceptos todavía</div></div>`;return;}
   const tipoLabel={rem:'Suma al bruto',ded:'Descuento',norem:'No remunerativo'};
-  const calculoLabel={pct:'Porcentaje',fijo:'Monto fijo'};
   let html=`<table><thead><tr><th>Código</th><th>Nombre</th><th>Tipo</th><th>Cálculo</th><th>Origen</th><th></th></tr></thead><tbody>`;
   filas.forEach(c=>{
+    const calculoTexto=c.calculo==='pct'?(c.porcentaje!=null?c.porcentaje+'%':'Porcentaje'):c.calculo==='fijo'?'Monto fijo':'—';
     const origenHtml=c.origen==='propio'?'<span style="color:var(--navy2);font-weight:600;">Propio</span>':'<span style="color:var(--text3);">Genérico</span>';
     const accionesHtml=c.origen==='propio'
-      ? `<button class="btn-sm btn-outline" onclick="editarConceptoEmpresa('${c.codigo}','${(c.nombre||'').replace(/'/g,"\\'")}','${c.tipo}','${c.calculo||''}')">Editar</button> <button class="btn-sm btn-outline" onclick="eliminarConceptoEmpresa('${c.id}')">Quitar</button>`
-      : `<button class="btn-sm btn-outline" onclick="editarConceptoEmpresa('${c.codigo}','${(c.nombre||'').replace(/'/g,"\\'")}','${c.tipo}','${c.calculo||''}')">Editar</button>`;
-    html+=`<tr><td><strong>${c.codigo}</strong></td><td>${c.nombre}</td><td>${tipoLabel[c.tipo]||c.tipo}</td><td>${calculoLabel[c.calculo]||'—'}</td><td>${origenHtml}</td><td>${accionesHtml}</td></tr>`;
+      ? `<button class="btn-sm btn-outline" onclick="editarConceptoEmpresa('${c.codigo}','${(c.nombre||'').replace(/'/g,"\\'")}','${c.tipo}','${c.calculo||''}','${c.porcentaje??''}')">Editar</button> <button class="btn-sm btn-outline" onclick="eliminarConceptoEmpresa('${c.id}')">Quitar</button>`
+      : `<button class="btn-sm btn-outline" onclick="editarConceptoEmpresa('${c.codigo}','${(c.nombre||'').replace(/'/g,"\\'")}','${c.tipo}','${c.calculo||''}','${c.porcentaje??''}')">Editar</button>`;
+    html+=`<tr><td><strong>${c.codigo}</strong></td><td>${c.nombre}</td><td>${tipoLabel[c.tipo]||c.tipo}</td><td>${calculoTexto}</td><td>${origenHtml}</td><td>${accionesHtml}</td></tr>`;
   });
   html+='</tbody></table>';
   cont.innerHTML=html;
 }
 
-function editarConceptoEmpresa(codigo,nombre,tipo,calculo){
+function editarConceptoEmpresa(codigo,nombre,tipo,calculo,porcentaje){
   document.getElementById('nc-codigo').value=codigo;
   document.getElementById('nc-nombre').value=nombre;
   document.getElementById('nc-tipo').value=tipo;
   document.getElementById('nc-calculo').value=calculo||'';
+  document.getElementById('nc-porcentaje').value=porcentaje||'';
   document.getElementById('nc-codigo').scrollIntoView({behavior:'smooth',block:'center'});
 }
 
@@ -951,17 +954,20 @@ async function agregarConceptoEmpresa(){
   const nombre=document.getElementById('nc-nombre').value.trim();
   const tipo=document.getElementById('nc-tipo').value;
   const calculo=document.getElementById('nc-calculo').value||null;
+  const porcentajeRaw=document.getElementById('nc-porcentaje').value.trim();
+  const porcentaje=porcentajeRaw?parseFloat(porcentajeRaw):null;
   if(!codigo||!nombre){alert('Completá el código y el nombre.');return;}
   const{data:existente}=await sb.from('conceptos_empresa').select('id').eq('empresa_id',empId).eq('codigo',codigo).maybeSingle();
   if(existente){
     if(!confirm(`El código ${codigo} ya existe para esta empresa. ¿Reemplazar su definición?`))return;
-    await sb.from('conceptos_empresa').update({nombre,tipo,calculo}).eq('id',existente.id);
+    await sb.from('conceptos_empresa').update({nombre,tipo,calculo,porcentaje}).eq('id',existente.id);
   } else {
-    await sb.from('conceptos_empresa').insert({empresa_id:empId,codigo,nombre,tipo,calculo});
+    await sb.from('conceptos_empresa').insert({empresa_id:empId,codigo,nombre,tipo,calculo,porcentaje});
   }
   document.getElementById('nc-codigo').value='';
   document.getElementById('nc-nombre').value='';
   document.getElementById('nc-calculo').value='';
+  document.getElementById('nc-porcentaje').value='';
   await cargarConceptosEmpresa(empId);
 }
 
@@ -1778,7 +1784,7 @@ async function cargarRecibosEmpleador(){
 async function verRecibo(reciboId){
   const{data:r}=await sb.from('recibos').select('*,empleados(*),empresas(*)').eq('id',reciboId).single();
   if(!r)return;
-  const{data:conceptosPropios}=await sb.from('conceptos_empresa').select('codigo,nombre,tipo,calculo').eq('empresa_id',r.empresa_id);
+  const{data:conceptosPropios}=await sb.from('conceptos_empresa').select('codigo,nombre,tipo,calculo,porcentaje').eq('empresa_id',r.empresa_id);
   const mapPropio={};
   conceptosPropios?.forEach(c=>mapPropio[c.codigo]=c);
   const datos=r.datos_json||{};
@@ -1789,7 +1795,7 @@ async function verRecibo(reciboId){
     const val=pc(v);if(!val)return;
     const tipoPorRango=clasificarConceptoPorRango(k);
     const info=mapPropio[k]||conceptosMap[k]||(tipoPorRango?{nombre:'Concepto '+k,tipo:tipoPorRango}:{nombre:'Concepto '+k+' (código no identificado)',tipo:'desconocido'});
-    conceptos.push({cod:k,nombre:info.nombre,tipo:info.tipo,calculo:info.calculo,importe:val});
+    conceptos.push({cod:k,nombre:info.nombre,tipo:info.tipo,calculo:info.calculo,porcentaje:info.porcentaje,importe:val});
   });
 
   // Cargar contribuciones reales de la empresa
@@ -1826,7 +1832,7 @@ async function verRecibo(reciboId){
     </div>`).join('');
 
   const rowsConc=conceptos.map(c=>{
-    const etiquetaCalculo=c.calculo==='pct'?'Porcentaje':c.calculo==='fijo'?'Monto fijo':'—';
+    const etiquetaCalculo=c.calculo==='pct'?(c.porcentaje!=null?c.porcentaje+'%':'Porcentaje'):c.calculo==='fijo'?'Monto fijo':'—';
     return `
     <div style="display:grid;grid-template-columns:1fr 100px 110px;padding:5px 12px;font-size:12px;border-bottom:0.5px solid var(--border);">
       <span><span style="color:var(--text3);font-size:11px;margin-right:3px;">${c.cod}.</span>${c.nombre}</span>
