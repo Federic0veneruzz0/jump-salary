@@ -445,6 +445,22 @@ tr:last-child td{border-bottom:none;}
           </div>
           <button class="btn btn-primary" onclick="guardarContribuciones()" style="width:auto;padding:10px 28px;">Guardar configuración</button>
           <div id="contrib-msg" style="margin-top:12px;display:none;"></div>
+
+          <div class="card" style="margin-top:20px;">
+            <div class="card-title">Otras contribuciones (propias de esta empresa)</div>
+            <div style="display:grid;grid-template-columns:1fr 140px 140px 100px;gap:10px;align-items:end;margin-bottom:14px;">
+              <div class="field"><label>Nombre</label><input type="text" id="ce-nombre" placeholder="ej: ART adicional" style="width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);"></div>
+              <div class="field"><label>Tipo</label>
+                <select id="ce-tipo" style="width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);">
+                  <option value="pct">% del sueldo bruto</option>
+                  <option value="fijo">Monto fijo ($)</option>
+                </select>
+              </div>
+              <div class="field"><label>Valor</label><input type="number" step="0.01" id="ce-valor" placeholder="ej: 1.5" style="width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);"></div>
+              <button class="btn btn-primary" onclick="agregarContribucionExtra()" style="padding:8px 16px;">+ Agregar</button>
+            </div>
+            <div id="tabla-contrib-extra"><div class="loading">Seleccioná una empresa para ver sus contribuciones extra.</div></div>
+          </div>
         </div>
       </div>
 
@@ -996,6 +1012,41 @@ async function cargarContribuciones(){
     document.getElementById('c-svc').value=cfg.SVC||0;
     document.getElementById('c-ffep').value=cfg.FFEP||0;
   }
+  await cargarContribucionesExtra(empId);
+}
+
+async function cargarContribucionesExtra(empId){
+  const cont=document.getElementById('tabla-contrib-extra');
+  if(!cont)return;
+  if(!empId){cont.innerHTML='<div class="loading">Seleccioná una empresa para ver sus contribuciones extra.</div>';return;}
+  const{data:extras}=await sb.from('contribuciones_extra').select('*').eq('empresa_id',empId).order('nombre');
+  if(!extras?.length){cont.innerHTML=`<div class="empty"><div class="empty-icon">➕</div><div class="empty-title">Sin contribuciones extra todavía</div></div>`;return;}
+  let html=`<table><thead><tr><th>Nombre</th><th>Tipo</th><th>Valor</th><th></th></tr></thead><tbody>`;
+  extras.forEach(c=>{
+    const valorTexto=c.tipo==='pct'?c.valor+'%':mon(c.valor);
+    html+=`<tr><td><strong>${c.nombre}</strong></td><td>${c.tipo==='pct'?'% del sueldo bruto':'Monto fijo'}</td><td>${valorTexto}</td><td><button class="btn-sm btn-outline" onclick="eliminarContribucionExtra('${c.id}')">Eliminar</button></td></tr>`;
+  });
+  html+='</tbody></table>';
+  cont.innerHTML=html;
+}
+
+async function agregarContribucionExtra(){
+  const empId=document.getElementById('select-empresa-contrib')?.value||empresaActivaId;
+  if(!empId){alert('Seleccioná una empresa en el panel superior primero.');return;}
+  const nombre=document.getElementById('ce-nombre').value.trim();
+  const tipo=document.getElementById('ce-tipo').value;
+  const valor=parseFloat(document.getElementById('ce-valor').value);
+  if(!nombre||isNaN(valor)){alert('Completá el nombre y el valor.');return;}
+  await sb.from('contribuciones_extra').insert({empresa_id:empId,nombre,tipo,valor});
+  document.getElementById('ce-nombre').value='';
+  document.getElementById('ce-valor').value='';
+  await cargarContribucionesExtra(empId);
+}
+
+async function eliminarContribucionExtra(id){
+  if(!confirm('¿Eliminar esta contribución? No afecta a los recibos ya generados, solo a los próximos.'))return;
+  await sb.from('contribuciones_extra').delete().eq('id',id);
+  await cargarContribucionesExtra(document.getElementById('select-empresa-contrib')?.value||empresaActivaId);
 }
 
 async function guardarContribuciones(){
@@ -1801,7 +1852,8 @@ async function verRecibo(reciboId){
   // Cargar contribuciones reales de la empresa
   const{data:contrib_cfg}=await sb.from('contribuciones_empresa').select('*').eq('empresa_id',r.empresa_id).single();
   const cfg=contrib_cfg||{};
-  
+  const{data:contribExtra}=await sb.from('contribuciones_extra').select('*').eq('empresa_id',r.empresa_id);
+
   const remBase=conceptos.filter(c=>c.tipo==='rem').reduce((s,c)=>s+c.importe,0);
   
   const CONTRIB_M=[
@@ -1813,6 +1865,7 @@ async function verRecibo(reciboId){
     {nombre:'LRT',                               pct:parseFloat(cfg.LRT||0),     tipo:'pct'},
     {nombre:'Seguro de Vida Colectivo',          monto:parseFloat(cfg.SVC||0),   tipo:'fijo'},
     {nombre:'FFEP',                              monto:parseFloat(cfg.FFEP||0),  tipo:'fijo'},
+    ...(contribExtra||[]).map(c=>c.tipo==='pct'?{nombre:c.nombre,pct:parseFloat(c.valor),tipo:'pct'}:{nombre:c.nombre,monto:parseFloat(c.valor),tipo:'fijo'}),
   ];
   const contrib=CONTRIB_M.map(c=>({
     ...c,
@@ -1834,9 +1887,10 @@ async function verRecibo(reciboId){
   const rowsConc=conceptos.map(c=>{
     const etiquetaCalculo=c.calculo==='pct'?(c.porcentaje!=null?c.porcentaje+'%':'Porcentaje'):c.calculo==='fijo'?'Monto fijo':'—';
     return `
-    <div style="display:grid;grid-template-columns:1fr 100px 110px;padding:5px 12px;font-size:12px;border-bottom:0.5px solid var(--border);">
+    <div style="display:grid;grid-template-columns:1fr 100px 110px 110px;padding:5px 12px;font-size:12px;border-bottom:0.5px solid var(--border);">
       <span><span style="color:var(--text3);font-size:11px;margin-right:3px;">${c.cod}.</span>${c.nombre}</span>
       <span style="text-align:right;color:var(--text3);">${etiquetaCalculo}</span>
+      <span style="text-align:right;">${c.calculo==='pct'?mon(remBase):'—'}</span>
       <span style="text-align:right;color:${c.tipo==='ded'?'var(--danger)':c.tipo==='norem'?'#854F0B':c.tipo==='desconocido'?'#C2410C':'var(--text)'};${c.tipo==='desconocido'?'font-weight:600;':''}">${mon(c.importe)}${c.tipo==='desconocido'?' ⚠️':''}</span>
     </div>`;
   }).join('');
@@ -1903,8 +1957,8 @@ async function verRecibo(reciboId){
         <span style="font-size:12px;font-weight:600;letter-spacing:.03em;">SUELDO BRUTO</span>
         <span style="font-size:13px;font-weight:600;">${mon(r.total_haberes+r.total_no_rem)}</span>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 100px 110px;padding:4px 12px;font-size:11px;color:var(--text3);border-bottom:0.5px solid var(--border-strong);">
-        <span>Concepto</span><span style="text-align:right;">Cálculo</span><span style="text-align:right;">Monto</span>
+      <div style="display:grid;grid-template-columns:1fr 100px 110px 110px;padding:4px 12px;font-size:11px;color:var(--text3);border-bottom:0.5px solid var(--border-strong);">
+        <span>Concepto</span><span style="text-align:right;">Cálculo</span><span style="text-align:right;">Base</span><span style="text-align:right;">Monto</span>
       </div>
       ${rowsConc}
       <div style="display:flex;justify-content:space-between;padding:6px 12px;background:var(--surface-1,#f8f9fb);border-top:1px solid var(--border);font-size:11px;color:var(--text2);">
