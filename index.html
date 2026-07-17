@@ -448,6 +448,26 @@ tr:last-child td{border-bottom:none;}
         </div>
       </div>
 
+      <div class="page" id="page-conceptos">
+        <div class="page-title">Diccionario de conceptos</div>
+        <div class="page-sub">Códigos propios de la empresa seleccionada en el panel (tienen prioridad sobre el diccionario genérico)</div>
+        <div class="card" style="padding:16px;margin-bottom:16px;">
+          <div style="display:grid;grid-template-columns:100px 1fr 160px 100px;gap:10px;align-items:end;">
+            <div class="field"><label>Código</label><input type="text" id="nc-codigo" placeholder="ej: 55" style="width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);"></div>
+            <div class="field"><label>Nombre</label><input type="text" id="nc-nombre" placeholder="ej: Retención sindical" style="width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);"></div>
+            <div class="field"><label>Tipo</label>
+              <select id="nc-tipo" style="width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);">
+                <option value="rem">Suma al bruto</option>
+                <option value="ded">Descuento</option>
+                <option value="norem">No remunerativo</option>
+              </select>
+            </div>
+            <button class="btn btn-primary" onclick="agregarConceptoEmpresa()" style="padding:8px 16px;">+ Agregar</button>
+          </div>
+        </div>
+        <div id="tabla-conceptos"><div class="loading">Seleccioná una empresa para ver sus conceptos.</div></div>
+      </div>
+
       <!-- PANEL EMPLEADO -->
       <div class="page" id="page-empleado-recibos">
         <div class="page-title">Mis recibos</div>
@@ -583,10 +603,51 @@ let conceptosMap = {};
 let seleccionados = new Set();
 let empresaActivaId = null; // empresa seleccionada en el topbar para el panel del contador
 
+function clasificarConceptoPorRango(codigo){
+  const n=parseInt(codigo,10);
+  if(isNaN(n))return null;
+  if(n>=1&&n<=100)return 'rem';       // suman al sueldo bruto
+  if(n>=101&&n<=199)return 'ded';     // restan al sueldo bruto
+  if(n>=201&&n<=299)return 'ded';     // retenciones sobre el sueldo bruto
+  if(n>=401&&n<=499)return 'norem';   // no remunerativos
+  return null;
+}
+
 const CONCEPTOS_DEFAULT = {
-  '1':{nombre:'Sueldo Basico',tipo:'rem'},'7':{nombre:'Presentismo',tipo:'rem'},
-  '41':{nombre:'Sueldo Anual Complementario',tipo:'rem'},'201':{nombre:'Jubilacion',tipo:'ded'},
-  '202':{nombre:'Ley 19032',tipo:'ded'},'206':{nombre:'Aporte Solidario Comercio',tipo:'ded'},
+  '1':{nombre:'Sueldo Basico',tipo:'rem'},'3':{nombre:'Antiguedad (%)',tipo:'rem'},
+  '4':{nombre:'Antiguedad (Importe)',tipo:'rem'},'5':{nombre:'Premio',tipo:'rem'},
+  '6':{nombre:'Licencias',tipo:'rem'},'7':{nombre:'Otros Haberes Remunerativos',tipo:'rem'},
+  '8':{nombre:'Otros Haberes Remunerativos',tipo:'rem'},'9':{nombre:'Asignacion Complementaria (s/sueldo)',tipo:'rem'},
+  '10':{nombre:'Feriados',tipo:'rem'},'11':{nombre:'Otros Haberes Remunerativos',tipo:'rem'},
+  '12':{nombre:'Otros Haberes Remunerativos',tipo:'rem'},'13':{nombre:'Otros Haberes Remunerativos',tipo:'rem'},
+  '14':{nombre:'Otros Haberes Remunerativos',tipo:'rem'},'15':{nombre:'Otros Haberes Remunerativos',tipo:'rem'},
+  '16':{nombre:'Plus por Zona Desfavorable',tipo:'rem'},'17':{nombre:'Horas extras 50% (s/valor hora)',tipo:'rem'},
+  '18':{nombre:'Horas extras 100% (s/valor hora)',tipo:'rem'},'19':{nombre:'Asignacion Complementaria (s/conc. 1 a 9)',tipo:'rem'},
+  '20':{nombre:'Asignacion Complementaria (s/conc. 1 a 9)',tipo:'rem'},'21':{nombre:'Horas extras 50% (s/sueldo)',tipo:'rem'},
+  '22':{nombre:'Horas extras 100% (s/sueldo)',tipo:'rem'},'23':{nombre:'Horas extras 50% (s/conc. 1 a 9)',tipo:'rem'},
+  '24':{nombre:'Horas extras 100% (s/conc. 1 a 9)',tipo:'rem'},'25':{nombre:'Horas extras 50% (s/conc. 1 a 19)',tipo:'rem'},
+  '26':{nombre:'Horas extras 100% (s/conc. 1 a 19)',tipo:'rem'},'27':{nombre:'Otros Haberes Remunerativos',tipo:'rem'},
+  '28':{nombre:'Otros Haberes Remunerativos',tipo:'rem'},'29':{nombre:'Asignacion Complementaria (s/conc. 1 a 19)',tipo:'rem'},
+  '30':{nombre:'Asignacion Complementaria (s/conc. 1 a 26)',tipo:'rem'},'31':{nombre:'Ajustes de Haberes Remunerativos',tipo:'rem'},
+  '32':{nombre:'Otros Haberes Remunerativos',tipo:'rem'},
+  '33':{nombre:'Otros Haberes Remunerativos',tipo:'rem'},'34':{nombre:'Otros Haberes Remunerativos',tipo:'rem'},
+  '35':{nombre:'Otros Haberes Remunerativos',tipo:'rem'},'36':{nombre:'Otros Haberes Remunerativos',tipo:'rem'},
+  '37':{nombre:'Otros Haberes Remunerativos',tipo:'rem'},'38':{nombre:'Incremento Solidario Dec.14/2020',tipo:'rem'},
+  '39':{nombre:'Incr.Salarial Dto 14/2020 Rectif',tipo:'rem'},'40':{nombre:'Premio',tipo:'rem'},
+  '41':{nombre:'Sueldo Anual Complementario',tipo:'rem'},
+  '42':{nombre:'Sueldo Anual Complementario Proporcional',tipo:'rem'},
+  '43':{nombre:'Asignacion Complementaria (s/conc. 1 a 39)',tipo:'rem'},
+  '51':{nombre:'Vacaciones Gozadas',tipo:'rem'},'61':{nombre:'Comisiones',tipo:'rem'},
+  '62':{nombre:'Comisiones',tipo:'rem'},'63':{nombre:'Viaticos',tipo:'rem'},
+  '64':{nombre:'Otros Haberes Remunerativos',tipo:'rem'},'65':{nombre:'Otros Haberes Remunerativos',tipo:'rem'},
+  '71':{nombre:'Anticipo de Haberes',tipo:'rem'},'72':{nombre:'Feriados',tipo:'rem'},
+  '81':{nombre:'Prest. Dineraria Ley 24577 (primeros 10d)',tipo:'rem'},
+  '82':{nombre:'Prest. Dineraria Ley 24577 (a cargo de la ART)',tipo:'rem'},
+  '90':{nombre:'Rectificativa por remuneración Ley 27.742',tipo:'rem'},
+  '91':{nombre:'Rectificativa por remuneracion Ley 27.802',tipo:'rem'},
+  '201':{nombre:'Jubilacion',tipo:'ded'},
+  '202':{nombre:'Ley 19032',tipo:'ded'},'203':{nombre:'Retención Obra Social',tipo:'ded'},
+  '206':{nombre:'Aporte Solidario Comercio',tipo:'ded'},
   '209':{nombre:'FAECyS',tipo:'ded'},'221':{nombre:'OS Comercio',tipo:'ded'},
   '415':{nombre:'No Remunerativo 12/2025',tipo:'norem'},'416':{nombre:'No Remunerativo 04/2026',tipo:'norem'},
   '417':{nombre:'Presentismo S/ No Rem 06/2025',tipo:'norem'},'418':{nombre:'Presentismo S/ No Rem 12/2025',tipo:'norem'},
@@ -743,6 +804,46 @@ async function guardarNuevaClave(){
   window.location.href=window.location.origin+window.location.pathname;
 }
 
+async function cargarConceptosEmpresa(empId){
+  const cont=document.getElementById('tabla-conceptos');
+  if(!cont)return;
+  if(!empId){cont.innerHTML='<div class="loading">Seleccioná una empresa para ver sus conceptos.</div>';return;}
+  const{data:conceptos}=await sb.from('conceptos_empresa').select('*').eq('empresa_id',empId).order('codigo');
+  if(!conceptos?.length){cont.innerHTML=`<div class="empty"><div class="empty-icon">🔢</div><div class="empty-title">Sin conceptos propios todavía</div><div class="empty-sub">Los códigos que agregues acá tienen prioridad sobre el diccionario genérico.</div></div>`;return;}
+  const tipoLabel={rem:'Suma al bruto',ded:'Descuento',norem:'No remunerativo'};
+  let html=`<table><thead><tr><th>Código</th><th>Nombre</th><th>Tipo</th><th></th></tr></thead><tbody>`;
+  conceptos.forEach(c=>{
+    html+=`<tr><td><strong>${c.codigo}</strong></td><td>${c.nombre}</td><td>${tipoLabel[c.tipo]||c.tipo}</td><td><button class="btn-sm btn-outline" onclick="eliminarConceptoEmpresa('${c.id}')">Eliminar</button></td></tr>`;
+  });
+  html+='</tbody></table>';
+  cont.innerHTML=html;
+}
+
+async function agregarConceptoEmpresa(){
+  const empId=empresaActivaId;
+  if(!empId){alert('Seleccioná una empresa en el panel superior primero.');return;}
+  const codigo=document.getElementById('nc-codigo').value.trim();
+  const nombre=document.getElementById('nc-nombre').value.trim();
+  const tipo=document.getElementById('nc-tipo').value;
+  if(!codigo||!nombre){alert('Completá el código y el nombre.');return;}
+  const{data:existente}=await sb.from('conceptos_empresa').select('id').eq('empresa_id',empId).eq('codigo',codigo).maybeSingle();
+  if(existente){
+    if(!confirm(`El código ${codigo} ya existe para esta empresa. ¿Reemplazar su definición?`))return;
+    await sb.from('conceptos_empresa').update({nombre,tipo}).eq('id',existente.id);
+  } else {
+    await sb.from('conceptos_empresa').insert({empresa_id:empId,codigo,nombre,tipo});
+  }
+  document.getElementById('nc-codigo').value='';
+  document.getElementById('nc-nombre').value='';
+  await cargarConceptosEmpresa(empId);
+}
+
+async function eliminarConceptoEmpresa(id){
+  if(!confirm('¿Eliminar este concepto del diccionario? Los recibos que ya lo usaron no se modifican, pero los próximos van a caer en la clasificación genérica.'))return;
+  await sb.from('conceptos_empresa').delete().eq('id',id);
+  await cargarConceptosEmpresa(empresaActivaId);
+}
+
 async function cargarContribuciones(){
   // Usar empresa activa del topbar si no hay selección manual
   const sel=document.getElementById('select-empresa-contrib');
@@ -861,6 +962,7 @@ function navTo(pageId,clickedEl){
   if(pageId==='page-dashboard') cargarDashboardContador();
   if(pageId==='page-empleados') cargarEmpleados();
   if(pageId==='page-contribuciones') cargarContribuciones();
+  if(pageId==='page-conceptos') cargarConceptosEmpresa(empresaActivaId);
   if(pageId==='page-empleado-recibos') cargarRecibosEmpleado();
 }
 
@@ -1048,6 +1150,7 @@ async function initContador(){
     {icon:'👥',label:'Empleados',page:'page-empleados'},
     {icon:'📄',label:'Recibos',page:'page-recibos-contador'},
     {icon:'⚙️',label:'Contribuciones',page:'page-contribuciones'},
+    {icon:'🔢',label:'Conceptos',page:'page-conceptos'},
   ];
   if(currentUser.dobleRol){
     sidebarItems.push({section:'Mis recibos'});
@@ -1140,6 +1243,7 @@ async function cambiarEmpresaActiva(empId){
   else if(pageId==='page-recibos-contador') await cargarRecibosContador();
   else if(pageId==='page-empleados') await cargarEmpleados();
   else if(pageId==='page-contribuciones') await cargarContribuciones();
+  else if(pageId==='page-conceptos') await cargarConceptosEmpresa(empId);
 }
 
 // ─── ALTA DE CLIENTES (self-service, sin tocar Supabase) ───
@@ -1547,6 +1651,9 @@ async function cargarRecibosEmpleador(){
 async function verRecibo(reciboId){
   const{data:r}=await sb.from('recibos').select('*,empleados(*),empresas(*)').eq('id',reciboId).single();
   if(!r)return;
+  const{data:conceptosPropios}=await sb.from('conceptos_empresa').select('codigo,nombre,tipo').eq('empresa_id',r.empresa_id);
+  const mapPropio={};
+  conceptosPropios?.forEach(c=>mapPropio[c.codigo]=c);
   const datos=r.datos_json||{};
   const SKIP=['Período','Tipo','Fecha','Fecha Alta','Fecha Baja','Modo Contrato','Categoria','CUIL','Legajo','Empleado','Haberes','No Remun.','Descuentos','Retenciones','Neto','Redondeado','Rem 4 y 8','Rem 9','Cont Tar Dif','Imp A Detraer','Cont Adic OS','% Adic SS'];
   const PCTS_MODAL={'201':11,'202':3,'206':2,'209':0.5,'221':3};
@@ -1554,7 +1661,8 @@ async function verRecibo(reciboId){
   Object.entries(datos).forEach(([k,v])=>{
     if(SKIP.includes(k)||!k.match(/^\d+$/))return;
     const val=pc(v);if(!val)return;
-    const info=conceptosMap[k]||{nombre:'Concepto '+k,tipo:'rem'};
+    const tipoPorRango=clasificarConceptoPorRango(k);
+    const info=mapPropio[k]||conceptosMap[k]||(tipoPorRango?{nombre:'Concepto '+k,tipo:tipoPorRango}:{nombre:'Concepto '+k+' (código no identificado)',tipo:'desconocido'});
     conceptos.push({cod:k,nombre:info.nombre,tipo:info.tipo,importe:val});
   });
 
@@ -1596,7 +1704,7 @@ async function verRecibo(reciboId){
       <span><span style="color:var(--text3);font-size:11px;margin-right:3px;">${c.cod}.</span>${c.nombre}</span>
       <span style="text-align:right;">${PCTS_MODAL[c.cod]?PCTS_MODAL[c.cod].toFixed(2)+'%':'—'}</span>
       <span style="text-align:right;">${PCTS_MODAL[c.cod]?mon(remBase):'—'}</span>
-      <span style="text-align:right;color:${c.tipo==='ded'?'var(--danger)':c.tipo==='norem'?'#854F0B':'var(--text)'};">${mon(c.importe)}</span>
+      <span style="text-align:right;color:${c.tipo==='ded'?'var(--danger)':c.tipo==='norem'?'#854F0B':c.tipo==='desconocido'?'#C2410C':'var(--text)'};${c.tipo==='desconocido'?'font-weight:600;':''}">${mon(c.importe)}${c.tipo==='desconocido'?' ⚠️':''}</span>
     </div>`).join('');
 
   document.getElementById('modal-recibo-title').textContent='Vista previa del recibo';
