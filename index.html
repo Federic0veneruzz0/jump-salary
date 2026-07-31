@@ -1861,8 +1861,17 @@ async function verRecibo(reciboId){
   const{data:contribExtra}=await sb.from('contribuciones_extra').select('*').eq('empresa_id',r.empresa_id);
 
   const remBase=conceptos.filter(c=>c.tipo==='rem').reduce((s,c)=>s+c.importe,0);
-  
-  const CONTRIB_M=[
+
+  // Modo de Contratación 099 (ARCA): directores/socios gerentes sin aportes a
+  // seguridad social ni obra social. Solo corresponden LRT, FFEP y Seguro de Vida Colectivo.
+  const modoContrato=String(datos['Modo Contrato']||'').trim().replace(/^0+/,'');
+  const esModo99=modoContrato==='99';
+
+  const CONTRIB_M=esModo99?[
+    {nombre:'LRT',                               pct:parseFloat(cfg.LRT||0),     tipo:'pct'},
+    {nombre:'Seguro de Vida Colectivo',          monto:parseFloat(cfg.SVC||0),   tipo:'fijo'},
+    {nombre:'FFEP',                              monto:parseFloat(cfg.FFEP||0),  tipo:'fijo'},
+  ]:[
     {nombre:'Contribución Jubilación (SIPA)',    pct:parseFloat(cfg.SIPA||16),   tipo:'pct'},
     {nombre:'Contribución INSSJP / PAMI',        pct:parseFloat(cfg.PAMI||2),    tipo:'pct'},
     {nombre:'Fondo Nacional de Empleo',          pct:parseFloat(cfg.FNE||1.5),   tipo:'pct'},
