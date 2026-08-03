@@ -427,6 +427,22 @@ tr:last-child td{border-bottom:none;}
         <div id="tabla-recibos-empleador"><div class="loading">Cargando...</div></div>
       </div>
 
+      <!-- PANEL EMPLEADOR: EMPLEADOS -->
+      <div class="page" id="page-empleador-empleados">
+        <div class="page-title">Empleados</div>
+        <div class="page-sub">Nómina de tu empresa</div>
+        <div class="card">
+          <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+            <span>Nómina</span>
+            <label style="font-size:13px;font-weight:400;display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="checkbox" id="chk-ver-inactivos-emp" onchange="cargarEmpleadosEmpleador()">
+              Mostrar también inactivos / dados de baja
+            </label>
+          </div>
+          <div id="tabla-empleados-empleador"><div class="loading">Cargando...</div></div>
+        </div>
+      </div>
+
       <!-- PANEL CONTRIBUCIONES -->
       <div class="page" id="page-contribuciones">
         <div class="page-title">Contribuciones patronales</div>
@@ -1168,6 +1184,7 @@ function navTo(pageId,clickedEl){
   if(pageId==='page-contribuciones') cargarContribuciones();
   if(pageId==='page-conceptos') cargarConceptosEmpresa(empresaActivaId);
   if(pageId==='page-empleado-recibos') cargarRecibosEmpleado();
+  if(pageId==='page-empleador-empleados') cargarEmpleadosEmpleador();
 }
 
 async function cargarEmpleados(){
@@ -1661,6 +1678,31 @@ async function resetearAccesoEmpleado(empleadoId,nombre){
   alert(`Listo. ${nombre} ya puede volver a entrar con su CUIL y DNI para crear una contraseña nueva.`);
 }
 
+// ─── EMPLEADOR: NÓMINA DE SU PROPIA EMPRESA ───
+async function cargarEmpleadosEmpleador(){
+  const verInactivos=document.getElementById('chk-ver-inactivos-emp')?.checked;
+  let q=sb.from('empleados').select('*').eq('empresa_id',currentUser.empresa_id).order('nombre');
+  if(!verInactivos) q=q.eq('activo',true);
+  const{data:empleados}=await q;
+  if(!empleados?.length){document.getElementById('tabla-empleados-empleador').innerHTML=`<div class="empty"><div class="empty-icon">👥</div><div class="empty-title">Sin empleados</div></div>`;return;}
+  const cuils=empleados.map(e=>nc(e.cuil));
+  const{data:usuariosData}=await sb.from('usuarios').select('cuit_cuil,email,primer_acceso').in('cuit_cuil',cuils);
+  const mapUsuarios={};
+  usuariosData?.forEach(u=>mapUsuarios[nc(u.cuit_cuil)]=u);
+  let html=`<table><thead><tr><th>Nombre</th><th>CUIL</th><th>Categoría</th><th>Ingreso</th><th>Acceso</th><th></th></tr></thead><tbody>`;
+  empleados.forEach(e=>{
+    const u=mapUsuarios[nc(e.cuil)];
+    let estadoAcceso;
+    if(!u){estadoAcceso='<span style="color:var(--text3)">Sin cuenta creada</span>';}
+    else if(u.primer_acceso){estadoAcceso='<span style="color:var(--text3)">Aún no ingresó (primer acceso pendiente)</span>';}
+    else if(u.email){estadoAcceso=u.email;}
+    else{estadoAcceso='<span style="color:var(--text3)">Sin email de recuperación</span>';}
+    html+=`<tr><td><strong>${e.nombre}</strong>${!e.activo?' <span style="font-size:11px;color:var(--text3);font-weight:400;">(dado de baja)</span>':''}</td><td>${fc(e.cuil)}</td><td>${e.categoria||'—'}</td><td>${e.fecha_ingreso||'—'}</td><td>${estadoAcceso}</td><td><button class="btn-sm btn-outline" onclick="resetearAccesoEmpleado('${e.id}','${(e.nombre||'').replace(/'/g,"\\'")}')">Resetear acceso</button></td></tr>`;
+  });
+  html+=`</tbody></table>`;
+  document.getElementById('tabla-empleados-empleador').innerHTML=html;
+}
+
 // ─── PROCESAR XLS ───
 async function procesarXLS(){
   const empId=empresaActivaId||document.getElementById('select-empresa')?.value;
@@ -1788,6 +1830,7 @@ async function initEmpleador(){
   const sidebarItems=[
     {section:'Mi empresa'},
     {icon:'🏠',label:'Panel empresa',page:'page-empleador-dashboard',active:true},
+    {icon:'👥',label:'Empleados',page:'page-empleador-empleados'},
   ];
 
   if(currentUser.dobleRol){
