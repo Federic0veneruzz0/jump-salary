@@ -417,6 +417,13 @@ tr:last-child td{border-bottom:none;}
           <div class="stat success"><div class="stat-val" id="emp-st-firmados">—</div><div class="stat-lbl">Firmados por empleados</div></div>
           <div class="stat danger"><div class="stat-val" id="emp-st-sinfirma">—</div><div class="stat-lbl">Sin firmar</div></div>
         </div>
+        <div class="card" style="padding:16px;">
+          <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <select id="filtro-periodo-emp" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" onchange="cargarRecibosEmpleador()">
+              <option value="">Todos los períodos</option>
+            </select>
+          </div>
+        </div>
         <div id="tabla-recibos-empleador"><div class="loading">Cargando...</div></div>
       </div>
 
@@ -497,6 +504,13 @@ tr:last-child td{border-bottom:none;}
       <div class="page" id="page-empleado-recibos">
         <div class="page-title">Mis recibos</div>
         <div class="page-sub">Solo vos podés ver y confirmar tus recibos</div>
+        <div class="card" style="padding:16px;">
+          <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <select id="filtro-periodo-empdo" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" onchange="cargarRecibosEmpleado()">
+              <option value="">Todos los períodos</option>
+            </select>
+          </div>
+        </div>
         <div id="lista-recibos-empleado"><div class="loading">Cargando...</div></div>
       </div>
 
@@ -1791,7 +1805,19 @@ async function initEmpleador(){
 }
 
 async function cargarRecibosEmpleador(){
-  const{data:recibos}=await sb.from('recibos').select('*,empleados(nombre,cuil)').eq('empresa_id',currentUser.empresa_id).order('created_at',{ascending:false});
+  const selPeriodo=document.getElementById('filtro-periodo-emp');
+  const periodoSeleccionado=selPeriodo?.value||'';
+
+  const{data:periodosData}=await sb.from('recibos').select('periodo').eq('empresa_id',currentUser.empresa_id);
+  const periodosDisponibles=[...new Set((periodosData||[]).map(p=>p.periodo).filter(Boolean))].sort((a,b)=>b.localeCompare(a));
+  if(selPeriodo){
+    selPeriodo.innerHTML='<option value="">Todos los períodos</option>'+periodosDisponibles.map(p=>`<option value="${p}">${parseMes(p)}</option>`).join('');
+    if(periodosDisponibles.includes(periodoSeleccionado)) selPeriodo.value=periodoSeleccionado;
+  }
+
+  let q=sb.from('recibos').select('*,empleados(nombre,cuil)').eq('empresa_id',currentUser.empresa_id).order('created_at',{ascending:false});
+  if(periodoSeleccionado&&periodosDisponibles.includes(periodoSeleccionado))q=q.eq('periodo',periodoSeleccionado);
+  const{data:recibos}=await q;
 
   const borradores=recibos?.filter(r=>r.estado==='borrador')||[];
   const publicados=recibos?.filter(r=>r.estado==='publicado')||[];
@@ -1938,7 +1964,7 @@ async function verRecibo(reciboId){
         </div>
         <div style="padding:8px 12px;">
           <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">CATEGORÍA</div>
-          <div style="font-size:13px;font-weight:600;">${emp.categoria||'—'}</div>
+          <div style="font-size:13px;font-weight:600;">${datos['Categoria']||emp.categoria||'—'}</div>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);border-bottom:2px solid var(--border);">
@@ -2106,8 +2132,21 @@ async function initEmpleado(){
 }
 
 async function cargarRecibosEmpleado(){
+  const selPeriodo=document.getElementById('filtro-periodo-empdo');
+  const periodoSeleccionado=selPeriodo?.value||'';
+
   const{data:empData}=await sb.from('empleados').select('*').eq('id',currentUser.empleado_id).single();
-  const{data:recibos}=await sb.from('recibos').select('*').eq('empleado_id',currentUser.empleado_id).eq('estado','publicado').order('created_at',{ascending:false});
+
+  const{data:periodosData}=await sb.from('recibos').select('periodo').eq('empleado_id',currentUser.empleado_id).eq('estado','publicado');
+  const periodosDisponibles=[...new Set((periodosData||[]).map(p=>p.periodo).filter(Boolean))].sort((a,b)=>b.localeCompare(a));
+  if(selPeriodo){
+    selPeriodo.innerHTML='<option value="">Todos los períodos</option>'+periodosDisponibles.map(p=>`<option value="${p}">${parseMes(p)}</option>`).join('');
+    if(periodosDisponibles.includes(periodoSeleccionado)) selPeriodo.value=periodoSeleccionado;
+  }
+
+  let q=sb.from('recibos').select('*').eq('empleado_id',currentUser.empleado_id).eq('estado','publicado').order('created_at',{ascending:false});
+  if(periodoSeleccionado&&periodosDisponibles.includes(periodoSeleccionado))q=q.eq('periodo',periodoSeleccionado);
+  const{data:recibos}=await q;
   const{data:constancias}=await sb.from('constancias').select('recibo_id').eq('empleado_id',currentUser.empleado_id);
   const firmadosIds=new Set(constancias?.map(c=>c.recibo_id)||[]);
 
