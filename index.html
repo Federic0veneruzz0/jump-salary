@@ -1086,8 +1086,8 @@ async function eliminarContribucionExtra(id){
 }
 
 async function guardarContribuciones(){
-  const empId=document.getElementById('select-empresa-contrib').value;
-  if(!empId)return;
+  const empId=document.getElementById('select-empresa-contrib')?.value||empresaActivaId;
+  if(!empId){alert('Seleccioná una empresa en el panel superior primero.');return;}
   const payload={
     empresa_id:empId,
     SIPA:parseFloat(document.getElementById('c-sipa').value)||16,
@@ -1100,11 +1100,13 @@ async function guardarContribuciones(){
     FFEP:parseFloat(document.getElementById('c-ffep').value)||0,
   };
   const{data:exists}=await sb.from('contribuciones_empresa').select('id').eq('empresa_id',empId).single();
+  let error;
   if(exists){
-    await sb.from('contribuciones_empresa').update(payload).eq('empresa_id',empId);
+    ({error}=await sb.from('contribuciones_empresa').update(payload).eq('empresa_id',empId));
   } else {
-    await sb.from('contribuciones_empresa').insert(payload);
+    ({error}=await sb.from('contribuciones_empresa').insert(payload));
   }
+  if(error){alert('No se pudo guardar: '+error.message);return;}
   showToast('✅ Contribuciones guardadas correctamente.');
 }
 
