@@ -402,7 +402,7 @@ tr:last-child td{border-bottom:none;}
             <select id="filtro-periodo-rec" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" onchange="cargarRecibosContador()">
               <option value="">Todos los períodos</option>
             </select>
-            <button class="btn-sm btn-outline" onclick="abrirModalListado()">📋 Generar listado</button>
+            <button class="btn-sm btn-outline" onclick="abrirModalListado(false)">📋 Generar listado</button>
           </div>
         </div>
         <div id="tabla-recibos-contador"><div class="loading">Cargando...</div></div>
@@ -538,9 +538,10 @@ tr:last-child td{border-bottom:none;}
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
-<!-- BARRA FLOTANTE DE SELECCIÓN MÚLTIPLE (solo recibos publicados + firmados) -->
+<!-- BARRA FLOTANTE DE SELECCIÓN MÚLTIPLE -->
 <div class="barra-seleccion" id="barra-seleccion">
   <div class="barra-seleccion-count"><span id="barra-seleccion-num">0</span> recibo(s) seleccionado(s)</div>
+  <button class="btn-sm btn-outline" style="background:transparent;border-color:rgba(255,255,255,.3);color:#fff;" onclick="abrirModalListado(true)">📋 Generar listado</button>
   <button class="btn-sm btn-gold" onclick="generarPDFMultiple()">⬇️ Descargar PDF combinado</button>
   <button class="btn-sm btn-outline" style="background:transparent;border-color:rgba(255,255,255,.3);color:#fff;" onclick="limpiarSeleccion()">Limpiar</button>
 </div>
@@ -562,19 +563,36 @@ tr:last-child td{border-bottom:none;}
 <div class="modal-overlay" id="modal-listado-config">
   <div class="modal">
     <div class="modal-title">Generar listado de empleados</div>
-    <div class="modal-sub">Elegí el período y los datos a incluir. Se genera para la empresa activa.</div>
-    <div class="field" style="margin-top:12px;">
+    <div class="modal-sub" id="listado-config-sub">Elegí el período y los datos a incluir. Se genera para la empresa activa.</div>
+    <div class="field" id="campo-periodo-listado" style="margin-top:12px;">
       <label>Período</label>
       <select id="select-periodo-listado" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:14px;"></select>
     </div>
+    <div id="campo-seleccion-listado" style="display:none;margin-top:12px;padding:10px 12px;background:var(--surface-1,#f8f9fb);border-radius:var(--radius);font-size:13px;color:var(--text2);"></div>
+    <div class="field" style="margin-top:12px;">
+      <label>Ordenar por</label>
+      <select id="select-orden-listado" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:14px;">
+        <option value="nombre">Nombre (alfabético)</option>
+        <option value="cuil">CUIL</option>
+        <option value="fecha_ingreso">Fecha de ingreso (más antiguos primero)</option>
+      </select>
+    </div>
     <div class="field" style="margin-top:12px;">
       <label>Datos a incluir (además de Nombre y CUIL)</label>
-      <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px;font-size:13px;">
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="chk-listado-bruto" checked> Bruto</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="chk-listado-norem"> No Remunerativo</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="chk-listado-os"> Aporte OS (empleado)</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="chk-listado-neto" checked> Neto</label>
-      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:-6px;margin-bottom:16px;">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:400;text-transform:none;letter-spacing:normal;color:var(--text);cursor:pointer;">
+        <input type="checkbox" id="chk-listado-bruto" checked style="width:16px;height:16px;flex-shrink:0;margin:0;padding:0;"> Bruto
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:400;text-transform:none;letter-spacing:normal;color:var(--text);cursor:pointer;">
+        <input type="checkbox" id="chk-listado-norem" style="width:16px;height:16px;flex-shrink:0;margin:0;padding:0;"> No Remunerativo
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:400;text-transform:none;letter-spacing:normal;color:var(--text);cursor:pointer;">
+        <input type="checkbox" id="chk-listado-os" style="width:16px;height:16px;flex-shrink:0;margin:0;padding:0;"> Aporte OS (empleado)
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:400;text-transform:none;letter-spacing:normal;color:var(--text);cursor:pointer;">
+        <input type="checkbox" id="chk-listado-neto" checked style="width:16px;height:16px;flex-shrink:0;margin:0;padding:0;"> Neto
+      </label>
     </div>
     <div class="modal-actions" style="margin-top:16px;">
       <button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-listado-config')">Cancelar</button>
@@ -1604,7 +1622,7 @@ async function cargarRecibosContador(){
   constancias?.forEach(c=>{firmaPorRecibo[c.recibo_id]=c.fecha_firma;});
 
   if(!recibos?.length){document.getElementById('tabla-recibos-contador').innerHTML=`<div class="empty"><div class="empty-icon">📄</div><div class="empty-title">Sin recibos</div></div>`;return;}
-  let html=`<div class="card"><table><thead><tr><th><input type="checkbox" class="chk-todos" onchange="toggleSeleccionarTodos(this)" title="Seleccionar todos los firmados"></th><th>Empleado</th><th>Empresa</th><th>Período</th><th>Tipo</th><th>Neto</th><th>Estado</th><th>Firma</th><th></th></tr></thead><tbody>`;
+  let html=`<div class="card"><table><thead><tr><th><input type="checkbox" class="chk-todos" onchange="toggleSeleccionarTodos(this)" title="Seleccionar todos"></th><th>Empleado</th><th>Empresa</th><th>Período</th><th>Tipo</th><th>Neto</th><th>Estado</th><th>Firma</th><th></th></tr></thead><tbody>`;
   recibos.forEach(r=>{
     const badgeClass={borrador:'badge-borrador',publicado:'badge-publicado',revocado:'badge-revocado',rechazado:'badge-rechazado'}[r.estado]||'badge-borrador';
     const firmadoOk=r.estado==='publicado'&&!!firmaPorRecibo[r.id];
@@ -1620,7 +1638,7 @@ async function cargarRecibosContador(){
     }
     const motivoRechazoHtml=r.estado==='rechazado'&&r.motivo_rechazo?`<div style="font-size:11px;color:var(--danger);margin-top:3px;">⚠️ ${r.motivo_rechazo}</div>`:'';
     html+=`<tr>
-      <td>${firmadoOk?`<input type="checkbox" class="chk-recibo" data-id="${r.id}" ${seleccionados.has(r.id)?'checked':''} onchange="toggleSeleccionRecibo('${r.id}',this.checked)" title="Seleccionar para descarga combinada">`:''}</td>
+      <td><input type="checkbox" class="chk-recibo" data-id="${r.id}" data-firmado="${firmadoOk?'1':'0'}" ${seleccionados.has(r.id)?'checked':''} onchange="toggleSeleccionRecibo('${r.id}',this.checked)" title="Seleccionar empleado"></td>
       <td><strong>${r.empleados?.nombre||'—'}</strong><br><small style="color:var(--text3)">${fc(r.empleados?.cuil||'')}</small>${motivoRechazoHtml}</td>
       <td>${r.empresas?.nombre||'—'}</td>
       <td>${parseMes(r.periodo)}</td>
@@ -2445,53 +2463,112 @@ async function generarPDFRecibo(reciboId,cerrarAlTerminar,esVistaEmpleado){
 }
 
 // ─── LISTADO DE EMPLEADOS ───
-async function abrirModalListado(){
-  if(!empresaActivaId){alert('Seleccioná una empresa en el panel superior primero.');return;}
-  const sel=document.getElementById('select-periodo-listado');
-  const{data:periodosData}=await sb.from('recibos').select('periodo').eq('empresa_id',empresaActivaId);
-  const periodosDisponibles=[...new Set((periodosData||[]).map(p=>p.periodo).filter(Boolean))].sort((a,b)=>b.localeCompare(a));
-  if(sel){
-    sel.innerHTML=periodosDisponibles.length
-      ?periodosDisponibles.map(p=>`<option value="${p}">${parseMes(p)}</option>`).join('')
-      :'<option value="">Sin períodos disponibles</option>';
+let _listadoDesdeSeleccion=false;
+
+async function abrirModalListado(desdeSeleccion){
+  _listadoDesdeSeleccion=!!desdeSeleccion;
+  const campoPeriodo=document.getElementById('campo-periodo-listado');
+  const campoSeleccion=document.getElementById('campo-seleccion-listado');
+  const sub=document.getElementById('listado-config-sub');
+
+  if(_listadoDesdeSeleccion){
+    if(!seleccionados.size){alert('Seleccioná al menos un empleado en la tabla de recibos.');return;}
+    if(campoPeriodo)campoPeriodo.style.display='none';
+    if(campoSeleccion){
+      campoSeleccion.style.display='block';
+      campoSeleccion.textContent=`Se va a generar el listado con los ${seleccionados.size} empleado(s) seleccionado(s).`;
+    }
+    if(sub)sub.textContent='Elegí los datos a incluir para los empleados seleccionados.';
+  } else {
+    if(!empresaActivaId){alert('Seleccioná una empresa en el panel superior primero.');return;}
+    if(campoPeriodo)campoPeriodo.style.display='block';
+    if(campoSeleccion)campoSeleccion.style.display='none';
+    if(sub)sub.textContent='Elegí el período y los datos a incluir. Se genera para la empresa activa.';
+    const sel=document.getElementById('select-periodo-listado');
+    const{data:periodosData}=await sb.from('recibos').select('periodo').eq('empresa_id',empresaActivaId);
+    const periodosDisponibles=[...new Set((periodosData||[]).map(p=>p.periodo).filter(Boolean))].sort((a,b)=>b.localeCompare(a));
+    if(sel){
+      sel.innerHTML=periodosDisponibles.length
+        ?periodosDisponibles.map(p=>`<option value="${p}">${parseMes(p)}</option>`).join('')
+        :'<option value="">Sin períodos disponibles</option>';
+    }
   }
   abrirModal('modal-listado-config');
 }
 
 async function generarListadoEmpleados(){
-  const periodo=document.getElementById('select-periodo-listado')?.value;
-  if(!periodo){alert('Seleccioná un período.');return;}
   const incluirBruto=document.getElementById('chk-listado-bruto')?.checked;
   const incluirNoRem=document.getElementById('chk-listado-norem')?.checked;
   const incluirOS=document.getElementById('chk-listado-os')?.checked;
   const incluirNeto=document.getElementById('chk-listado-neto')?.checked;
 
+  let periodo=null,tituloListado='';
   const btn=document.getElementById('btn-generar-listado');
   const textoOriginal=btn?btn.textContent:'';
   if(btn){btn.disabled=true;btn.textContent='Generando...';}
   try{
-    const{data:recibos}=await sb.from('recibos').select('*,empleados(nombre,cuil)').eq('empresa_id',empresaActivaId).eq('periodo',periodo);
-    if(!recibos?.length){alert('No hay recibos para ese período.');return;}
+    let recibos;
+    if(_listadoDesdeSeleccion){
+      const ids=[...seleccionados];
+      if(!ids.length){alert('No hay empleados seleccionados.');return;}
+      const{data}=await sb.from('recibos').select('*,empleados(nombre,cuil,fecha_ingreso),empresas(nombre)').in('id',ids);
+      recibos=data;
+      const periodosSel=[...new Set((recibos||[]).map(r=>r.periodo).filter(Boolean))];
+      tituloListado=periodosSel.length===1?parseMes(periodosSel[0]):'Selección personalizada';
+    } else {
+      periodo=document.getElementById('select-periodo-listado')?.value;
+      if(!periodo){alert('Seleccioná un período.');return;}
+      const{data}=await sb.from('recibos').select('*,empleados(nombre,cuil,fecha_ingreso)').eq('empresa_id',empresaActivaId).eq('periodo',periodo);
+      recibos=data;
+      tituloListado=parseMes(periodo);
+    }
+    if(!recibos?.length){alert('No hay recibos para generar el listado.');return;}
 
-    const{data:conceptosPropios}=await sb.from('conceptos_empresa').select('codigo,nombre,tipo,calculo,porcentaje,base_codigo').eq('empresa_id',empresaActivaId);
-    const mapPropio={};
-    conceptosPropios?.forEach(c=>mapPropio[c.codigo]=c);
+    // Agrupamos conceptos propios por empresa (puede haber más de una si viene de selección multi-empresa)
+    const empresaIds=[...new Set(recibos.map(r=>r.empresa_id).filter(Boolean))];
+    const{data:conceptosPropios}=await sb.from('conceptos_empresa').select('codigo,nombre,tipo,calculo,porcentaje,base_codigo,empresa_id').in('empresa_id',empresaIds);
+    const mapPropioPorEmpresa={};
+    empresaIds.forEach(id=>mapPropioPorEmpresa[id]={});
+    conceptosPropios?.forEach(c=>{if(mapPropioPorEmpresa[c.empresa_id])mapPropioPorEmpresa[c.empresa_id][c.codigo]=c;});
+
+    const mostrarEmpresa=_listadoDesdeSeleccion&&empresaIds.length>1;
 
     const filas=recibos.map(r=>{
+      const mapPropio=mapPropioPorEmpresa[r.empresa_id]||{};
       const conceptos=extraerConceptos(r.datos_json,mapPropio);
       return{
         nombre:r.empleados?.nombre||'—',
         cuil:fc(r.empleados?.cuil||''),
+        cuilRaw:nc(r.empleados?.cuil||''),
+        fechaIngreso:r.empleados?.fecha_ingreso||null,
+        empresa:r.empresas?.nombre||'',
         bruto:(r.total_haberes||0)+(r.total_no_rem||0),
         norem:r.total_no_rem||0,
         os:calcularAporteOS(conceptos),
         neto:r.neto_redondeado||r.neto||0,
       };
-    }).sort((a,b)=>a.nombre.localeCompare(b.nombre,'es',{sensitivity:'base'}));
+    });
 
-    window._listadoActual={periodo};
+    const ordenPor=document.getElementById('select-orden-listado')?.value||'nombre';
+    if(ordenPor==='cuil'){
+      filas.sort((a,b)=>a.cuilRaw.localeCompare(b.cuilRaw));
+    } else if(ordenPor==='fecha_ingreso'){
+      filas.sort((a,b)=>{
+        if(!a.fechaIngreso&&!b.fechaIngreso)return 0;
+        if(!a.fechaIngreso)return 1;
+        if(!b.fechaIngreso)return -1;
+        return new Date(a.fechaIngreso)-new Date(b.fechaIngreso);
+      });
+    } else {
+      filas.sort((a,b)=>a.nombre.localeCompare(b.nombre,'es',{sensitivity:'base'}));
+    }
+    const mostrarFechaIngreso=ordenPor==='fecha_ingreso';
+
+    window._listadoActual={periodo:periodo||'seleccion'};
 
     let cols='<th style="text-align:left;padding:6px 8px;">Nombre completo</th><th style="text-align:left;padding:6px 8px;">CUIL</th>';
+    if(mostrarFechaIngreso)cols+='<th style="text-align:left;padding:6px 8px;">Fecha Ingreso</th>';
+    if(mostrarEmpresa)cols+='<th style="text-align:left;padding:6px 8px;">Empresa</th>';
     if(incluirBruto)cols+='<th style="text-align:right;padding:6px 8px;">Bruto</th>';
     if(incluirNoRem)cols+='<th style="text-align:right;padding:6px 8px;">No Remunerativo</th>';
     if(incluirOS)cols+='<th style="text-align:right;padding:6px 8px;">Aporte OS</th>';
@@ -2499,6 +2576,8 @@ async function generarListadoEmpleados(){
 
     const rowsHtml=filas.map(f=>{
       let tds=`<td style="padding:5px 8px;">${f.nombre}</td><td style="padding:5px 8px;">${f.cuil}</td>`;
+      if(mostrarFechaIngreso)tds+=`<td style="padding:5px 8px;">${f.fechaIngreso||'—'}</td>`;
+      if(mostrarEmpresa)tds+=`<td style="padding:5px 8px;">${f.empresa}</td>`;
       if(incluirBruto)tds+=`<td style="text-align:right;padding:5px 8px;">${mon(f.bruto)}</td>`;
       if(incluirNoRem)tds+=`<td style="text-align:right;padding:5px 8px;">${mon(f.norem)}</td>`;
       if(incluirOS)tds+=`<td style="text-align:right;padding:5px 8px;">${mon(f.os)}</td>`;
@@ -2506,10 +2585,10 @@ async function generarListadoEmpleados(){
       return `<tr style="border-bottom:0.5px solid var(--border);">${tds}</tr>`;
     }).join('');
 
-    document.getElementById('modal-listado-resultado-title').textContent=`Listado de empleados · ${parseMes(periodo)}`;
+    document.getElementById('modal-listado-resultado-title').textContent=`Listado de empleados · ${tituloListado}`;
     document.getElementById('modal-listado-resultado-body').innerHTML=`
       <div id="listado-pdf-contenedor" style="background:#fff;padding:14px;">
-        <div style="font-size:14px;font-weight:600;color:var(--navy2);margin-bottom:10px;">Listado de empleados — ${parseMes(periodo)}</div>
+        <div style="font-size:14px;font-weight:600;color:var(--navy2);margin-bottom:10px;">Listado de empleados — ${tituloListado}</div>
         <table style="width:100%;border-collapse:collapse;font-size:12px;">
           <thead><tr style="border-bottom:2px solid var(--navy2);color:var(--text3);">${cols}</tr></thead>
           <tbody>${rowsHtml}</tbody>
