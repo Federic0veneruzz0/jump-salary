@@ -402,6 +402,7 @@ tr:last-child td{border-bottom:none;}
             <select id="filtro-periodo-rec" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" onchange="cargarRecibosContador()">
               <option value="">Todos los períodos</option>
             </select>
+            <button class="btn-sm btn-outline" onclick="abrirModalListado()">📋 Generar listado</button>
           </div>
         </div>
         <div id="tabla-recibos-contador"><div class="loading">Cargando...</div></div>
@@ -554,6 +555,46 @@ tr:last-child td{border-bottom:none;}
     </div>
     <div id="modal-recibo-body"></div>
     <div class="modal-actions" id="modal-recibo-actions" style="margin-top:16px;"></div>
+  </div>
+</div>
+
+<!-- MODAL GENERAR LISTADO: configuración -->
+<div class="modal-overlay" id="modal-listado-config">
+  <div class="modal">
+    <div class="modal-title">Generar listado de empleados</div>
+    <div class="modal-sub">Elegí el período y los datos a incluir. Se genera para la empresa activa.</div>
+    <div class="field" style="margin-top:12px;">
+      <label>Período</label>
+      <select id="select-periodo-listado" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:14px;"></select>
+    </div>
+    <div class="field" style="margin-top:12px;">
+      <label>Datos a incluir (además de Nombre y CUIL)</label>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px;font-size:13px;">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="chk-listado-bruto" checked> Bruto</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="chk-listado-norem"> No Remunerativo</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="chk-listado-os"> Aporte OS (empleado)</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="chk-listado-neto" checked> Neto</label>
+      </div>
+    </div>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-listado-config')">Cancelar</button>
+      <button class="btn-sm btn-gold" id="btn-generar-listado" style="flex:1;" onclick="generarListadoEmpleados()">Generar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL GENERAR LISTADO: resultado -->
+<div class="modal-overlay" id="modal-listado-resultado" style="align-items:flex-start;padding:20px;overflow-y:auto;">
+  <div class="modal" style="max-width:720px;width:100%;margin:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <div class="modal-title" id="modal-listado-resultado-title">Listado de empleados</div>
+      <button class="btn-sm btn-outline" onclick="cerrarModal('modal-listado-resultado')">✕ Cerrar</button>
+    </div>
+    <div id="modal-listado-resultado-body" style="max-height:60vh;overflow-y:auto;"></div>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-listado-resultado')">Cerrar</button>
+      <button class="btn-sm btn-gold" id="btn-exportar-listado-pdf" style="flex:1;" onclick="exportarListadoPDF()">⬇️ Exportar PDF</button>
+    </div>
   </div>
 </div>
 
@@ -1909,6 +1950,28 @@ async function cargarRecibosEmpleador(){
   actualizarBarraSeleccion();
 }
 
+// Extrae y clasifica los conceptos de un recibo a partir de su datos_json.
+// Única fuente de verdad reutilizada por verRecibo() y por el listado de empleados.
+function extraerConceptos(datos,mapPropio){
+  mapPropio=mapPropio||{};
+  const SKIP=['Período','Tipo','Fecha','Fecha Alta','Fecha Baja','Modo Contrato','Categoria','CUIL','Legajo','Empleado','Haberes','No Remun.','Descuentos','Retenciones','Neto','Redondeado','Rem 4 y 8','Rem 9','Cont Tar Dif','Imp A Detraer','Cont Adic OS','% Adic SS'];
+  const conceptos=[];
+  Object.entries(datos||{}).forEach(([k,v])=>{
+    if(SKIP.includes(k)||!k.match(/^\d+$/))return;
+    const val=pc(v);if(!val)return;
+    const tipoPorRango=clasificarConceptoPorRango(k);
+    const info=mapPropio[k]||conceptosMap[k]||(tipoPorRango?{nombre:'Concepto '+k,tipo:tipoPorRango}:{nombre:'Concepto '+k+' (código no identificado)',tipo:'desconocido'});
+    conceptos.push({cod:k,nombre:info.nombre,tipo:info.tipo,calculo:info.calculo,porcentaje:info.porcentaje,base_codigo:info.base_codigo,importe:val});
+  });
+  return conceptos;
+}
+
+// Suma los conceptos deducidos al empleado relacionados con Obra Social
+// (código 203 Obra Social, 204 Obra Social Adherente, 221/222 Aporte Adicional OS, etc.)
+function calcularAporteOS(conceptos){
+  return (conceptos||[]).filter(c=>c.tipo==='ded'&&/obra social|\bos\b/i.test(c.nombre||'')).reduce((s,c)=>s+c.importe,0);
+}
+
 async function verRecibo(reciboId){
   const{data:r}=await sb.from('recibos').select('*,empleados(*),empresas(*)').eq('id',reciboId).single();
   if(!r)return;
@@ -1916,15 +1979,7 @@ async function verRecibo(reciboId){
   const mapPropio={};
   conceptosPropios?.forEach(c=>mapPropio[c.codigo]=c);
   const datos=r.datos_json||{};
-  const SKIP=['Período','Tipo','Fecha','Fecha Alta','Fecha Baja','Modo Contrato','Categoria','CUIL','Legajo','Empleado','Haberes','No Remun.','Descuentos','Retenciones','Neto','Redondeado','Rem 4 y 8','Rem 9','Cont Tar Dif','Imp A Detraer','Cont Adic OS','% Adic SS'];
-  const conceptos=[];
-  Object.entries(datos).forEach(([k,v])=>{
-    if(SKIP.includes(k)||!k.match(/^\d+$/))return;
-    const val=pc(v);if(!val)return;
-    const tipoPorRango=clasificarConceptoPorRango(k);
-    const info=mapPropio[k]||conceptosMap[k]||(tipoPorRango?{nombre:'Concepto '+k,tipo:tipoPorRango}:{nombre:'Concepto '+k+' (código no identificado)',tipo:'desconocido'});
-    conceptos.push({cod:k,nombre:info.nombre,tipo:info.tipo,calculo:info.calculo,porcentaje:info.porcentaje,base_codigo:info.base_codigo,importe:val});
-  });
+  const conceptos=extraerConceptos(datos,mapPropio);
 
   // Cargar contribuciones reales de la empresa
   const{data:contrib_cfg}=await sb.from('contribuciones_empresa').select('*').eq('empresa_id',r.empresa_id).single();
@@ -2386,6 +2441,123 @@ async function generarPDFRecibo(reciboId,cerrarAlTerminar,esVistaEmpleado){
     } else {
       await verRecibo(reciboId);
     }
+  }
+}
+
+// ─── LISTADO DE EMPLEADOS ───
+async function abrirModalListado(){
+  if(!empresaActivaId){alert('Seleccioná una empresa en el panel superior primero.');return;}
+  const sel=document.getElementById('select-periodo-listado');
+  const{data:periodosData}=await sb.from('recibos').select('periodo').eq('empresa_id',empresaActivaId);
+  const periodosDisponibles=[...new Set((periodosData||[]).map(p=>p.periodo).filter(Boolean))].sort((a,b)=>b.localeCompare(a));
+  if(sel){
+    sel.innerHTML=periodosDisponibles.length
+      ?periodosDisponibles.map(p=>`<option value="${p}">${parseMes(p)}</option>`).join('')
+      :'<option value="">Sin períodos disponibles</option>';
+  }
+  abrirModal('modal-listado-config');
+}
+
+async function generarListadoEmpleados(){
+  const periodo=document.getElementById('select-periodo-listado')?.value;
+  if(!periodo){alert('Seleccioná un período.');return;}
+  const incluirBruto=document.getElementById('chk-listado-bruto')?.checked;
+  const incluirNoRem=document.getElementById('chk-listado-norem')?.checked;
+  const incluirOS=document.getElementById('chk-listado-os')?.checked;
+  const incluirNeto=document.getElementById('chk-listado-neto')?.checked;
+
+  const btn=document.getElementById('btn-generar-listado');
+  const textoOriginal=btn?btn.textContent:'';
+  if(btn){btn.disabled=true;btn.textContent='Generando...';}
+  try{
+    const{data:recibos}=await sb.from('recibos').select('*,empleados(nombre,cuil)').eq('empresa_id',empresaActivaId).eq('periodo',periodo);
+    if(!recibos?.length){alert('No hay recibos para ese período.');return;}
+
+    const{data:conceptosPropios}=await sb.from('conceptos_empresa').select('codigo,nombre,tipo,calculo,porcentaje,base_codigo').eq('empresa_id',empresaActivaId);
+    const mapPropio={};
+    conceptosPropios?.forEach(c=>mapPropio[c.codigo]=c);
+
+    const filas=recibos.map(r=>{
+      const conceptos=extraerConceptos(r.datos_json,mapPropio);
+      return{
+        nombre:r.empleados?.nombre||'—',
+        cuil:fc(r.empleados?.cuil||''),
+        bruto:(r.total_haberes||0)+(r.total_no_rem||0),
+        norem:r.total_no_rem||0,
+        os:calcularAporteOS(conceptos),
+        neto:r.neto_redondeado||r.neto||0,
+      };
+    }).sort((a,b)=>a.nombre.localeCompare(b.nombre,'es',{sensitivity:'base'}));
+
+    window._listadoActual={periodo};
+
+    let cols='<th style="text-align:left;padding:6px 8px;">Nombre completo</th><th style="text-align:left;padding:6px 8px;">CUIL</th>';
+    if(incluirBruto)cols+='<th style="text-align:right;padding:6px 8px;">Bruto</th>';
+    if(incluirNoRem)cols+='<th style="text-align:right;padding:6px 8px;">No Remunerativo</th>';
+    if(incluirOS)cols+='<th style="text-align:right;padding:6px 8px;">Aporte OS</th>';
+    if(incluirNeto)cols+='<th style="text-align:right;padding:6px 8px;">Neto</th>';
+
+    const rowsHtml=filas.map(f=>{
+      let tds=`<td style="padding:5px 8px;">${f.nombre}</td><td style="padding:5px 8px;">${f.cuil}</td>`;
+      if(incluirBruto)tds+=`<td style="text-align:right;padding:5px 8px;">${mon(f.bruto)}</td>`;
+      if(incluirNoRem)tds+=`<td style="text-align:right;padding:5px 8px;">${mon(f.norem)}</td>`;
+      if(incluirOS)tds+=`<td style="text-align:right;padding:5px 8px;">${mon(f.os)}</td>`;
+      if(incluirNeto)tds+=`<td style="text-align:right;padding:5px 8px;">${mon(f.neto)}</td>`;
+      return `<tr style="border-bottom:0.5px solid var(--border);">${tds}</tr>`;
+    }).join('');
+
+    document.getElementById('modal-listado-resultado-title').textContent=`Listado de empleados · ${parseMes(periodo)}`;
+    document.getElementById('modal-listado-resultado-body').innerHTML=`
+      <div id="listado-pdf-contenedor" style="background:#fff;padding:14px;">
+        <div style="font-size:14px;font-weight:600;color:var(--navy2);margin-bottom:10px;">Listado de empleados — ${parseMes(periodo)}</div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead><tr style="border-bottom:2px solid var(--navy2);color:var(--text3);">${cols}</tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>`;
+    cerrarModal('modal-listado-config');
+    abrirModal('modal-listado-resultado');
+  }catch(err){
+    console.error('Error generando listado:',err);
+    alert('No se pudo generar el listado. Probá de nuevo.');
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent=textoOriginal;}
+  }
+}
+
+async function exportarListadoPDF(){
+  const contenedor=document.getElementById('listado-pdf-contenedor');
+  if(!contenedor)return;
+  const btn=document.getElementById('btn-exportar-listado-pdf');
+  const textoOriginal=btn?btn.textContent:'';
+  if(btn){btn.disabled=true;btn.textContent='Generando...';}
+  try{
+    const canvas=await html2canvas(contenedor,{scale:2,backgroundColor:'#ffffff',useCORS:true});
+    const imgData=canvas.toDataURL('image/png');
+    const{jsPDF}=window.jspdf;
+    const pdf=new jsPDF('p','mm','a4');
+    const pageWidth=pdf.internal.pageSize.getWidth();
+    const pageHeight=pdf.internal.pageSize.getHeight();
+    const imgWidth=pageWidth-20;
+    const imgHeight=(canvas.height*imgWidth)/canvas.width;
+
+    let heightLeft=imgHeight;
+    let position=10;
+    pdf.addImage(imgData,'PNG',10,position,imgWidth,Math.min(imgHeight,pageHeight-20));
+    heightLeft-=(pageHeight-20);
+    while(heightLeft>0){
+      position=heightLeft-imgHeight+10;
+      pdf.addPage();
+      pdf.addImage(imgData,'PNG',10,position,imgWidth,imgHeight);
+      heightLeft-=pageHeight;
+    }
+    const periodo=window._listadoActual?.periodo||'listado';
+    pdf.save(`listado_empleados_${periodo}.pdf`);
+  }catch(err){
+    console.error('Error exportando PDF del listado:',err);
+    alert('No se pudo generar el PDF.');
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent=textoOriginal;}
   }
 }
 
