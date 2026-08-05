@@ -2641,7 +2641,10 @@ async function cargarPageConvenios(){
   lista.innerHTML=`<div class="card"><table><thead><tr><th>Convenio</th><th></th></tr></thead><tbody>${
     data.map(c=>`<tr style="cursor:pointer;${_convenioSeleccionadoPanelId===c.id?'background:var(--surface-1,#f8f9fb);':''}" onclick="seleccionarConvenioEnPanel('${c.id}','${c.nombre.replace(/'/g,"\\'")}')">
       <td>${c.nombre}</td>
-      <td style="text-align:right;"><button class="btn-sm btn-outline" onclick="event.stopPropagation();eliminarConvenioPanel('${c.id}','${c.nombre.replace(/'/g,"\\'")}')">🗑️</button></td>
+      <td style="text-align:right;white-space:nowrap;">
+        <button class="btn-sm btn-outline" onclick="event.stopPropagation();editarConvenioPanel('${c.id}','${c.nombre.replace(/'/g,"\\'")}')">✏️</button>
+        <button class="btn-sm btn-outline" onclick="event.stopPropagation();eliminarConvenioPanel('${c.id}','${c.nombre.replace(/'/g,"\\'")}')">🗑️</button>
+      </td>
     </tr>`).join('')
   }</tbody></table></div>`;
 }
@@ -2658,6 +2661,23 @@ async function agregarConvenioDesdePanel(){
   input.value='';
   showToast('✅ Convenio agregado.');
   cargarPageConvenios();
+}
+
+async function editarConvenioPanel(id,nombreActual){
+  const nuevoNombre=prompt('Editar nombre del convenio:',nombreActual);
+  if(nuevoNombre===null)return;
+  const nombre=nuevoNombre.trim();
+  if(!nombre||nombre===nombreActual)return;
+  const{data:existentes}=await sb.from('convenios_colectivos').select('id,nombre').neq('id',id);
+  const duplicado=existentes?.find(c=>c.nombre.toLowerCase()===nombre.toLowerCase());
+  if(duplicado){alert(`Ya existe un convenio "${duplicado.nombre}" — no puede haber dos con el mismo nombre.`);return;}
+  const{error}=await sb.from('convenios_colectivos').update({nombre}).eq('id',id);
+  if(error){alert('No se pudo renombrar: '+error.message);return;}
+  showToast('✅ Convenio renombrado.');
+  cargarPageConvenios();
+  if(_convenioSeleccionadoPanelId===id){
+    document.getElementById('panel-categorias-header').querySelector('div').textContent=`Categorías de "${nombre}"`;
+  }
 }
 
 async function eliminarConvenioPanel(id,nombre){
@@ -2695,7 +2715,10 @@ async function cargarListaCategoriasPanel(){
   const lista=document.getElementById('lista-categorias');
   if(!data?.length){lista.innerHTML=`<div class="empty"><div class="empty-icon">🏷️</div><div class="empty-title">Sin categorías todavía</div></div>`;return;}
   lista.innerHTML=`<div class="card"><table><thead><tr><th>Categoría</th><th></th></tr></thead><tbody>${
-    data.map(c=>`<tr><td>${c.nombre}</td><td style="text-align:right;"><button class="btn-sm btn-outline" onclick="eliminarCategoriaPanel('${c.id}','${c.nombre.replace(/'/g,"\\'")}')">🗑️</button></td></tr>`).join('')
+    data.map(c=>`<tr><td>${c.nombre}</td><td style="text-align:right;white-space:nowrap;">
+      <button class="btn-sm btn-outline" onclick="editarCategoriaPanel('${c.id}','${c.nombre.replace(/'/g,"\\'")}')">✏️</button>
+      <button class="btn-sm btn-outline" onclick="eliminarCategoriaPanel('${c.id}','${c.nombre.replace(/'/g,"\\'")}')">🗑️</button>
+    </td></tr>`).join('')
   }</tbody></table></div>`;
 }
 
@@ -2711,6 +2734,21 @@ async function agregarCategoriaDesdePanel(){
   if(error){alert('No se pudo agregar: '+error.message);return;}
   input.value='';
   showToast('✅ Categoría agregada.');
+  cargarListaCategoriasPanel();
+}
+
+async function editarCategoriaPanel(id,nombreActual){
+  if(!_convenioSeleccionadoPanelId)return;
+  const nuevoNombre=prompt('Editar nombre de la categoría:',nombreActual);
+  if(nuevoNombre===null)return;
+  const nombre=nuevoNombre.trim();
+  if(!nombre||nombre===nombreActual)return;
+  const{data:existentes}=await sb.from('categorias_convenio').select('id,nombre').eq('convenio_id',_convenioSeleccionadoPanelId).neq('id',id);
+  const duplicado=existentes?.find(c=>c.nombre.toLowerCase()===nombre.toLowerCase());
+  if(duplicado){alert(`Ya existe la categoría "${duplicado.nombre}" en este convenio.`);return;}
+  const{error}=await sb.from('categorias_convenio').update({nombre}).eq('id',id);
+  if(error){alert('No se pudo renombrar: '+error.message);return;}
+  showToast('✅ Categoría renombrada.');
   cargarListaCategoriasPanel();
 }
 
