@@ -2382,6 +2382,30 @@ async function aprobarRecibo(reciboId){
   cerrarModal('modal-ver-recibo');
   showToast('✅ Recibo aprobado correctamente.');
   await refrescarVistaRecibos();
+  notificarRecibo(reciboId).catch(err=>console.error('No se pudo enviar el aviso por email:',err));
+}
+
+async function notificarRecibo(reciboId){
+  const{data:r}=await sb.from('recibos').select('periodo,tipo,empleado_id,empleados(nombre,cuil)').eq('id',reciboId).maybeSingle();
+  if(!r?.empleado_id)return;
+  const{data:usuario}=await sb.from('usuarios').select('email').eq('empleado_id',r.empleado_id).maybeSingle();
+  if(!usuario?.email){
+    console.info('No se envió aviso: el empleado no tiene email registrado.');
+    return;
+  }
+  const{data,error}=await sb.functions.invoke('notificar-recibo',{
+    body:{
+      email:usuario.email,
+      nombre:r.empleados?.nombre||'',
+      periodo:r.periodo||'',
+      tipo:r.tipo||'sueldo',
+    }
+  });
+  if(error){
+    console.error('Error al invocar notificar-recibo:',error);
+    return;
+  }
+  console.info('Aviso de recibo enviado:',data);
 }
 
 // ─── RECHAZAR RECIBO (empleador) ───
