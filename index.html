@@ -2656,7 +2656,7 @@ async function cargarFilasPlantilla(){
   const{data:filas}=await sb.from('conceptos_empleado').select('*').eq('empresa_id',empresaActivaId).eq('empleado_id',_plantillaEmpleadoId).eq('periodo',periodo).eq('tipo',tipo).order('codigo');
   document.getElementById('plantilla-filas').innerHTML='';
   if(filas?.length){
-    filas.forEach(f=>agregarFilaPlantilla(f));
+    ordenarFilasPorTipo(filas).forEach(f=>agregarFilaPlantilla(f));
     estado.textContent=`${filas.length} concepto(s) cargado(s) para ${tipo} · ${periodo}.`;
   } else {
     estado.textContent=`No hay plantilla guardada para ${tipo} · ${periodo} todavía. Podés cargarla a mano o clonar el período anterior.`;
@@ -2665,6 +2665,14 @@ async function cargarFilasPlantilla(){
 
 function clasificacionConcepto(codigo){
   return _plantillaMapPropio[codigo]?.tipo||conceptosMap[codigo]?.tipo||clasificarConceptoPorRango(codigo)||'desconocido';
+}
+
+function ordenTipoConcepto(tipo){
+  return tipo==='rem'?0:tipo==='ded'?1:tipo==='norem'?2:3;
+}
+
+function ordenarFilasPorTipo(filas){
+  return[...filas].sort((a,b)=>ordenTipoConcepto(clasificacionConcepto(a.codigo))-ordenTipoConcepto(clasificacionConcepto(b.codigo)));
 }
 
 function verVistaPreviaPlantilla(){
@@ -2710,7 +2718,7 @@ async function clonarPeriodoAnterior(){
   if(!periodoAnterior){alert(`No encontré una plantilla anterior de tipo "${tipo}" para clonar.`);return;}
   const{data:filas}=await sb.from('conceptos_empleado').select('*').eq('empresa_id',empresaActivaId).eq('empleado_id',_plantillaEmpleadoId).eq('periodo',periodoAnterior).eq('tipo',tipo).order('codigo');
   document.getElementById('plantilla-filas').innerHTML='';
-  filas?.forEach(f=>agregarFilaPlantilla(f));
+  ordenarFilasPorTipo(filas||[]).forEach(f=>agregarFilaPlantilla(f));
   estado.textContent=`Clonado desde ${periodoAnterior} (${filas?.length||0} concepto(s)). Revisá y ajustá lo que cambió antes de guardar.`;
 }
 
@@ -2728,7 +2736,7 @@ async function importarDesdeRecibo(){
   const conceptos=extraerConceptos(recibo.datos_json,_plantillaMapPropio);
   if(!conceptos.length){alert('El recibo encontrado no tiene conceptos para importar.');return;}
   document.getElementById('plantilla-filas').innerHTML='';
-  conceptos.forEach(c=>agregarFilaPlantilla({codigo:c.cod,calculo:'fijo',valor:c.importe,base_codigo:null}));
+  ordenarFilasPorTipo(conceptos.map(c=>({codigo:c.cod,calculo:'fijo',valor:c.importe,base_codigo:null}))).forEach(f=>agregarFilaPlantilla(f));
   estado.textContent=`Importado desde el recibo real: ${conceptos.length} concepto(s), fieles al importe exacto de ese recibo. Revisá y guardá.`;
 }
 
