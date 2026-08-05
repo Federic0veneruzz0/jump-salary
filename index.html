@@ -2958,6 +2958,11 @@ async function guardarLegajo(){
     if(error)throw error;
     showToast('✅ Legajo guardado correctamente.');
     cerrarModal('modal-legajo-empleado');
+    if(document.getElementById('page-empleados')?.classList.contains('active')){
+      cargarTablaEmpleados(empId);
+    } else if(document.getElementById('page-empleador-empleados')?.classList.contains('active')){
+      cargarEmpleadosEmpleador();
+    }
   }catch(err){
     console.error('Error guardando legajo:',err);
     alert('No se pudo guardar el legajo: '+err.message);
