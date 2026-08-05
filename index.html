@@ -718,11 +718,13 @@ tr:last-child td{border-bottom:none;}
       </div>
       <div class="field" style="margin-bottom:0;">
         <label>Convenio colectivo</label>
-        <input type="text" id="legajo-convenio" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+        <select id="legajo-convenio-select" onchange="onCambioConvenioSelect()" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;"></select>
+        <input type="text" id="legajo-convenio-nuevo-input" placeholder="Nombre del convenio nuevo — Enter para confirmar" style="display:none;margin-top:6px;width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" onblur="confirmarNuevoConvenio()" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
       </div>
       <div class="field" style="margin-bottom:0;">
         <label>Categoría</label>
-        <input type="text" id="legajo-categoria" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+        <select id="legajo-categoria-select" onchange="onCambioCategoriaSelect()" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;"></select>
+        <input type="text" id="legajo-categoria-nueva-input" placeholder="Nombre de la categoría nueva — Enter para confirmar" style="display:none;margin-top:6px;width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" onblur="confirmarNuevaCategoria()" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
       </div>
       <div class="field" style="margin-bottom:0;">
         <label>Sueldo Básico vigente</label>
@@ -2604,6 +2606,121 @@ async function generarPDFRecibo(reciboId,cerrarAlTerminar,esVistaEmpleado){
   }
 }
 
+// ─── CATÁLOGO DE CONVENIOS Y CATEGORÍAS ───
+let _conveniosCache=[];
+let _categoriasCache=[];
+
+async function cargarConveniosCatalogo(){
+  const{data}=await sb.from('convenios_colectivos').select('id,nombre').order('nombre');
+  _conveniosCache=data||[];
+}
+
+function renderConvenioSelect(nombreSeleccionado){
+  const sel=document.getElementById('legajo-convenio-select');
+  let html='<option value="">— Sin especificar —</option>';
+  _conveniosCache.forEach(c=>{
+    html+=`<option value="${c.nombre.replace(/"/g,'&quot;')}" ${c.nombre===nombreSeleccionado?'selected':''}>${c.nombre}</option>`;
+  });
+  html+='<option value="__nuevo__">+ Agregar convenio nuevo…</option>';
+  sel.innerHTML=html;
+  if(nombreSeleccionado&&!_conveniosCache.some(c=>c.nombre===nombreSeleccionado)){
+    sel.insertAdjacentHTML('afterbegin',`<option value="${nombreSeleccionado.replace(/"/g,'&quot;')}" selected>${nombreSeleccionado} (no está en el catálogo)</option>`);
+  }
+  document.getElementById('legajo-convenio-nuevo-input').style.display='none';
+  document.getElementById('legajo-convenio-nuevo-input').value='';
+}
+
+function onCambioConvenioSelect(){
+  const val=document.getElementById('legajo-convenio-select').value;
+  const inputNuevo=document.getElementById('legajo-convenio-nuevo-input');
+  if(val==='__nuevo__'){
+    inputNuevo.style.display='block';
+    inputNuevo.focus();
+    cargarCategoriasParaConvenio('');
+  } else {
+    inputNuevo.style.display='none';
+    cargarCategoriasParaConvenio(val);
+  }
+}
+
+async function confirmarNuevoConvenio(){
+  const inputNuevo=document.getElementById('legajo-convenio-nuevo-input');
+  const nombre=inputNuevo.value.trim();
+  if(!nombre)return;
+  const existente=_conveniosCache.find(c=>c.nombre.toLowerCase()===nombre.toLowerCase());
+  let convenioFinal=existente?existente.nombre:nombre;
+  if(!existente){
+    const{data,error}=await sb.from('convenios_colectivos').insert({nombre}).select().maybeSingle();
+    if(!error&&data){
+      _conveniosCache.push(data);
+    } else if(error){
+      await cargarConveniosCatalogo();
+      const reintento=_conveniosCache.find(c=>c.nombre.toLowerCase()===nombre.toLowerCase());
+      if(reintento)convenioFinal=reintento.nombre;
+    }
+  }
+  renderConvenioSelect(convenioFinal);
+  await cargarCategoriasParaConvenio(convenioFinal);
+}
+
+async function cargarCategoriasParaConvenio(nombreConvenio,categoriaSeleccionada){
+  const sel=document.getElementById('legajo-categoria-select');
+  const inputNuevo=document.getElementById('legajo-categoria-nueva-input');
+  inputNuevo.style.display='none';inputNuevo.value='';
+  if(!nombreConvenio||nombreConvenio==='__nuevo__'){
+    sel.innerHTML='<option value="">— Elegí primero un convenio —</option>';
+    _categoriasCache=[];
+    return;
+  }
+  const convenio=_conveniosCache.find(c=>c.nombre===nombreConvenio);
+  if(!convenio){
+    sel.innerHTML='<option value="">— Elegí primero un convenio —</option>';
+    _categoriasCache=[];
+    return;
+  }
+  const{data}=await sb.from('categorias_convenio').select('id,nombre').eq('convenio_id',convenio.id).order('nombre');
+  _categoriasCache=data||[];
+  let html='<option value="">— Sin especificar —</option>';
+  _categoriasCache.forEach(c=>{
+    html+=`<option value="${c.nombre.replace(/"/g,'&quot;')}" ${c.nombre===categoriaSeleccionada?'selected':''}>${c.nombre}</option>`;
+  });
+  html+='<option value="__nueva__">+ Agregar categoría nueva…</option>';
+  sel.innerHTML=html;
+  if(categoriaSeleccionada&&!_categoriasCache.some(c=>c.nombre===categoriaSeleccionada)){
+    sel.insertAdjacentHTML('afterbegin',`<option value="${categoriaSeleccionada.replace(/"/g,'&quot;')}" selected>${categoriaSeleccionada} (no está en el catálogo)</option>`);
+  }
+}
+
+function onCambioCategoriaSelect(){
+  const val=document.getElementById('legajo-categoria-select').value;
+  const inputNuevo=document.getElementById('legajo-categoria-nueva-input');
+  inputNuevo.style.display=val==='__nueva__'?'block':'none';
+  if(val==='__nueva__')inputNuevo.focus();
+}
+
+async function confirmarNuevaCategoria(){
+  const inputNuevo=document.getElementById('legajo-categoria-nueva-input');
+  const nombre=inputNuevo.value.trim();
+  if(!nombre)return;
+  const nombreConvenio=document.getElementById('legajo-convenio-select').value;
+  const convenio=_conveniosCache.find(c=>c.nombre===nombreConvenio);
+  if(!convenio){alert('Elegí o agregá primero un convenio.');inputNuevo.value='';return;}
+  const existente=_categoriasCache.find(c=>c.nombre.toLowerCase()===nombre.toLowerCase());
+  let categoriaFinal=existente?existente.nombre:nombre;
+  if(!existente){
+    const{data,error}=await sb.from('categorias_convenio').insert({convenio_id:convenio.id,nombre}).select().maybeSingle();
+    if(!error&&data){
+      _categoriasCache.push(data);
+    } else if(error){
+      const{data:recarga}=await sb.from('categorias_convenio').select('id,nombre').eq('convenio_id',convenio.id).order('nombre');
+      _categoriasCache=recarga||[];
+      const reintento=_categoriasCache.find(c=>c.nombre.toLowerCase()===nombre.toLowerCase());
+      if(reintento)categoriaFinal=reintento.nombre;
+    }
+  }
+  await cargarCategoriasParaConvenio(nombreConvenio,categoriaFinal);
+}
+
 // ─── LEGAJO DE EMPLEADO ───
 let _legajoEmpleadoId=null;
 
@@ -2616,22 +2733,26 @@ async function abrirLegajoEmpleado(empleadoId,nombre){
   if(!empId){alert('No se pudo determinar la empresa. Volvé a intentarlo.');return;}
   _legajoEmpleadoId=empleadoId;
   document.getElementById('legajo-empleado-title').textContent=`Legajo — ${nombre}`;
-  const campos=['numero','situacion','convenio','categoria','basico','os','banco','cbu','domicilio'];
+  const campos=['numero','situacion','basico','os','banco','cbu','domicilio'];
   campos.forEach(c=>{const el=document.getElementById('legajo-'+c);if(el)el.value=c==='situacion'?'activo':'';});
   document.getElementById('legajo-afiliado').checked=false;
+
+  await cargarConveniosCatalogo();
+  renderConvenioSelect('');
+  await cargarCategoriasParaConvenio('','');
 
   const{data:legajo}=await sb.from('legajo_empleado').select('*').eq('empleado_id',empleadoId).maybeSingle();
   if(legajo){
     document.getElementById('legajo-numero').value=legajo.numero_legajo||'';
     document.getElementById('legajo-situacion').value=legajo.situacion_revista||'activo';
-    document.getElementById('legajo-convenio').value=legajo.convenio||'';
-    document.getElementById('legajo-categoria').value=legajo.categoria||'';
     document.getElementById('legajo-basico').value=legajo.sueldo_basico??'';
     document.getElementById('legajo-os').value=legajo.obra_social||'';
     document.getElementById('legajo-banco').value=legajo.banco||'';
     document.getElementById('legajo-cbu').value=legajo.cbu||'';
     document.getElementById('legajo-domicilio').value=legajo.domicilio||'';
     document.getElementById('legajo-afiliado').checked=!!legajo.afiliado_sindicato;
+    renderConvenioSelect(legajo.convenio||'');
+    await cargarCategoriasParaConvenio(legajo.convenio||'',legajo.categoria||'');
   }
   abrirModal('modal-legajo-empleado');
 }
@@ -2643,13 +2764,21 @@ async function guardarLegajo(){
   const textoOriginal=btn?btn.textContent:'';
   if(btn){btn.disabled=true;btn.textContent='Guardando...';}
   try{
+    if(document.getElementById('legajo-convenio-select').value==='__nuevo__'){
+      await confirmarNuevoConvenio();
+    }
+    if(document.getElementById('legajo-categoria-select').value==='__nueva__'){
+      await confirmarNuevaCategoria();
+    }
+    const convenioVal=document.getElementById('legajo-convenio-select').value;
+    const categoriaVal=document.getElementById('legajo-categoria-select').value;
     const payload={
       empresa_id:empId,
       empleado_id:_legajoEmpleadoId,
       numero_legajo:document.getElementById('legajo-numero').value.trim()||null,
       situacion_revista:document.getElementById('legajo-situacion').value,
-      convenio:document.getElementById('legajo-convenio').value.trim()||null,
-      categoria:document.getElementById('legajo-categoria').value.trim()||null,
+      convenio:convenioVal&&convenioVal!=='__nuevo__'?convenioVal:null,
+      categoria:categoriaVal&&categoriaVal!=='__nueva__'?categoriaVal:null,
       sueldo_basico:parseFloat(document.getElementById('legajo-basico').value)||null,
       obra_social:document.getElementById('legajo-os').value.trim()||null,
       banco:document.getElementById('legajo-banco').value.trim()||null,
