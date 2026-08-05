@@ -693,6 +693,71 @@ tr:last-child td{border-bottom:none;}
   </div>
 </div>
 
+<!-- MODAL LEGAJO DE EMPLEADO -->
+<div class="modal-overlay" id="modal-legajo-empleado" style="align-items:flex-start;padding:20px;overflow-y:auto;">
+  <div class="modal" style="max-width:600px;width:100%;margin:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div class="modal-title" id="legajo-empleado-title">Legajo</div>
+      <button class="btn-sm btn-outline" onclick="cerrarModal('modal-legajo-empleado')">✕ Cerrar</button>
+    </div>
+    <div class="modal-sub" style="margin-bottom:14px;">Datos complementarios a los que trae ARCA — el importador nunca los pisa.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div class="field" style="margin-bottom:0;">
+        <label>Número de Legajo</label>
+        <input type="text" id="legajo-numero" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+      </div>
+      <div class="field" style="margin-bottom:0;">
+        <label>Situación de revista</label>
+        <select id="legajo-situacion" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+          <option value="activo">Activo</option>
+          <option value="licencia">Licencia</option>
+          <option value="suspendido">Suspendido</option>
+          <option value="vacaciones">Vacaciones</option>
+          <option value="baja">Baja</option>
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:0;">
+        <label>Convenio colectivo</label>
+        <input type="text" id="legajo-convenio" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+      </div>
+      <div class="field" style="margin-bottom:0;">
+        <label>Categoría</label>
+        <input type="text" id="legajo-categoria" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+      </div>
+      <div class="field" style="margin-bottom:0;">
+        <label>Sueldo Básico vigente</label>
+        <input type="number" step="0.01" id="legajo-basico" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+      </div>
+      <div class="field" style="margin-bottom:0;">
+        <label>Obra Social</label>
+        <input type="text" id="legajo-os" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+      </div>
+      <div class="field" style="margin-bottom:0;">
+        <label>Banco</label>
+        <input type="text" id="legajo-banco" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+      </div>
+      <div class="field" style="margin-bottom:0;">
+        <label>CBU</label>
+        <input type="text" id="legajo-cbu" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+      </div>
+      <div class="field" style="margin-bottom:0;grid-column:1/-1;">
+        <label>Domicilio</label>
+        <input type="text" id="legajo-domicilio" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+      </div>
+      <div class="field" style="margin-bottom:0;grid-column:1/-1;">
+        <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:normal;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+          <input type="checkbox" id="legajo-afiliado" style="width:16px;height:16px;margin:0;">
+          Afiliado al sindicato (si no está tildado, se asume aporte solidario)
+        </label>
+      </div>
+    </div>
+    <div class="modal-actions" style="margin-top:18px;">
+      <button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-legajo-empleado')">Cancelar</button>
+      <button class="btn-sm btn-gold" id="btn-guardar-legajo" style="flex:1;" onclick="guardarLegajo()">💾 Guardar legajo</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL REVOCAR -->
 <div class="modal-overlay" id="modal-revocar">
   <div class="modal">
@@ -1798,7 +1863,7 @@ async function cargarTablaEmpleados(empId){
     else if(u.primer_acceso){estadoAcceso='<span style="color:var(--text3)">Aún no ingresó (primer acceso pendiente)</span>';}
     else if(u.email){estadoAcceso=u.email;}
     else{estadoAcceso='<span style="color:var(--text3)">Sin email de recuperación</span>';}
-    html+=`<tr><td><strong>${e.nombre}</strong>${!e.activo?' <span style="font-size:11px;color:var(--text3);font-weight:400;">(dado de baja)</span>':''}</td><td>${fc(e.cuil)}</td><td>${e.categoria||'—'}</td><td>${e.fecha_ingreso||'—'}</td><td>${estadoAcceso}</td><td><button class="btn-sm btn-outline" onclick="resetearAccesoEmpleado('${e.id}','${(e.nombre||'').replace(/'/g,"\\'")}')">Resetear acceso</button></td></tr>`;
+    html+=`<tr><td><strong>${e.nombre}</strong>${!e.activo?' <span style="font-size:11px;color:var(--text3);font-weight:400;">(dado de baja)</span>':''}</td><td>${fc(e.cuil)}</td><td>${e.categoria||'—'}</td><td>${e.fecha_ingreso||'—'}</td><td>${estadoAcceso}</td><td style="white-space:nowrap;"><button class="btn-sm btn-outline" style="margin-right:5px;" onclick="abrirLegajoEmpleado('${e.id}','${(e.nombre||'').replace(/'/g,"\\'")}')">📁 Legajo</button><button class="btn-sm btn-outline" onclick="resetearAccesoEmpleado('${e.id}','${(e.nombre||'').replace(/'/g,"\\'")}')">Resetear acceso</button></td></tr>`;
   });
   html+=`</tbody></table>`;
   document.getElementById('tabla-empleados').innerHTML=html;
@@ -1835,7 +1900,7 @@ async function cargarEmpleadosEmpleador(){
     else if(u.primer_acceso){estadoAcceso='<span style="color:var(--text3)">Aún no ingresó (primer acceso pendiente)</span>';}
     else if(u.email){estadoAcceso=u.email;}
     else{estadoAcceso='<span style="color:var(--text3)">Sin email de recuperación</span>';}
-    html+=`<tr><td><strong>${e.nombre}</strong>${!e.activo?' <span style="font-size:11px;color:var(--text3);font-weight:400;">(dado de baja)</span>':''}</td><td>${fc(e.cuil)}</td><td>${e.categoria||'—'}</td><td>${e.fecha_ingreso||'—'}</td><td>${estadoAcceso}</td><td><button class="btn-sm btn-outline" onclick="resetearAccesoEmpleado('${e.id}','${(e.nombre||'').replace(/'/g,"\\'")}')">Resetear acceso</button></td></tr>`;
+    html+=`<tr><td><strong>${e.nombre}</strong>${!e.activo?' <span style="font-size:11px;color:var(--text3);font-weight:400;">(dado de baja)</span>':''}</td><td>${fc(e.cuil)}</td><td>${e.categoria||'—'}</td><td>${e.fecha_ingreso||'—'}</td><td>${estadoAcceso}</td><td style="white-space:nowrap;"><button class="btn-sm btn-outline" style="margin-right:5px;" onclick="abrirLegajoEmpleado('${e.id}','${(e.nombre||'').replace(/'/g,"\\'")}')">📁 Legajo</button><button class="btn-sm btn-outline" onclick="resetearAccesoEmpleado('${e.id}','${(e.nombre||'').replace(/'/g,"\\'")}')">Resetear acceso</button></td></tr>`;
   });
   html+=`</tbody></table>`;
   document.getElementById('tabla-empleados-empleador').innerHTML=html;
@@ -2536,6 +2601,77 @@ async function generarPDFRecibo(reciboId,cerrarAlTerminar,esVistaEmpleado){
     } else {
       await verRecibo(reciboId);
     }
+  }
+}
+
+// ─── LEGAJO DE EMPLEADO ───
+let _legajoEmpleadoId=null;
+
+function empresaIdParaLegajo(){
+  return empresaActivaId||currentUser?.empresa_id||null;
+}
+
+async function abrirLegajoEmpleado(empleadoId,nombre){
+  const empId=empresaIdParaLegajo();
+  if(!empId){alert('No se pudo determinar la empresa. Volvé a intentarlo.');return;}
+  _legajoEmpleadoId=empleadoId;
+  document.getElementById('legajo-empleado-title').textContent=`Legajo — ${nombre}`;
+  const campos=['numero','situacion','convenio','categoria','basico','os','banco','cbu','domicilio'];
+  campos.forEach(c=>{const el=document.getElementById('legajo-'+c);if(el)el.value=c==='situacion'?'activo':'';});
+  document.getElementById('legajo-afiliado').checked=false;
+
+  const{data:legajo}=await sb.from('legajo_empleado').select('*').eq('empleado_id',empleadoId).maybeSingle();
+  if(legajo){
+    document.getElementById('legajo-numero').value=legajo.numero_legajo||'';
+    document.getElementById('legajo-situacion').value=legajo.situacion_revista||'activo';
+    document.getElementById('legajo-convenio').value=legajo.convenio||'';
+    document.getElementById('legajo-categoria').value=legajo.categoria||'';
+    document.getElementById('legajo-basico').value=legajo.sueldo_basico??'';
+    document.getElementById('legajo-os').value=legajo.obra_social||'';
+    document.getElementById('legajo-banco').value=legajo.banco||'';
+    document.getElementById('legajo-cbu').value=legajo.cbu||'';
+    document.getElementById('legajo-domicilio').value=legajo.domicilio||'';
+    document.getElementById('legajo-afiliado').checked=!!legajo.afiliado_sindicato;
+  }
+  abrirModal('modal-legajo-empleado');
+}
+
+async function guardarLegajo(){
+  const empId=empresaIdParaLegajo();
+  if(!_legajoEmpleadoId||!empId)return;
+  const btn=document.getElementById('btn-guardar-legajo');
+  const textoOriginal=btn?btn.textContent:'';
+  if(btn){btn.disabled=true;btn.textContent='Guardando...';}
+  try{
+    const payload={
+      empresa_id:empId,
+      empleado_id:_legajoEmpleadoId,
+      numero_legajo:document.getElementById('legajo-numero').value.trim()||null,
+      situacion_revista:document.getElementById('legajo-situacion').value,
+      convenio:document.getElementById('legajo-convenio').value.trim()||null,
+      categoria:document.getElementById('legajo-categoria').value.trim()||null,
+      sueldo_basico:parseFloat(document.getElementById('legajo-basico').value)||null,
+      obra_social:document.getElementById('legajo-os').value.trim()||null,
+      banco:document.getElementById('legajo-banco').value.trim()||null,
+      cbu:document.getElementById('legajo-cbu').value.trim()||null,
+      domicilio:document.getElementById('legajo-domicilio').value.trim()||null,
+      afiliado_sindicato:document.getElementById('legajo-afiliado').checked,
+    };
+    const{data:existe}=await sb.from('legajo_empleado').select('id').eq('empleado_id',_legajoEmpleadoId).maybeSingle();
+    let error;
+    if(existe){
+      ({error}=await sb.from('legajo_empleado').update(payload).eq('empleado_id',_legajoEmpleadoId));
+    } else {
+      ({error}=await sb.from('legajo_empleado').insert(payload));
+    }
+    if(error)throw error;
+    showToast('✅ Legajo guardado correctamente.');
+    cerrarModal('modal-legajo-empleado');
+  }catch(err){
+    console.error('Error guardando legajo:',err);
+    alert('No se pudo guardar el legajo: '+err.message);
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent=textoOriginal;}
   }
 }
 
