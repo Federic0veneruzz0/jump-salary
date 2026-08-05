@@ -679,8 +679,15 @@ tr:last-child td{border-bottom:none;}
       </table>
     </div>
     <button class="btn-sm btn-outline" style="margin-top:10px;" onclick="agregarFilaPlantilla()">+ Agregar concepto</button>
+
+    <div id="plantilla-vista-previa" style="display:none;margin-top:16px;padding:14px;background:var(--surface-1,#f8f9fb);border-radius:var(--radius);">
+      <div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Vista previa (a partir de lo cargado en la grilla)</div>
+      <div id="plantilla-vista-previa-body" style="font-size:13px;"></div>
+    </div>
+
     <div class="modal-actions" style="margin-top:16px;">
       <button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-plantilla-empleado')">Cancelar</button>
+      <button class="btn-sm btn-outline" style="flex:1;" onclick="verVistaPreviaPlantilla()">👁️ Vista previa</button>
       <button class="btn-sm btn-gold" id="btn-guardar-plantilla" style="flex:1;" onclick="guardarPlantilla()">💾 Guardar plantilla</button>
     </div>
   </div>
@@ -2656,6 +2663,42 @@ async function cargarFilasPlantilla(){
   }
 }
 
+function clasificacionConcepto(codigo){
+  return _plantillaMapPropio[codigo]?.tipo||conceptosMap[codigo]?.tipo||clasificarConceptoPorRango(codigo)||'desconocido';
+}
+
+function verVistaPreviaPlantilla(){
+  const filas=leerFilasPlantillaUI();
+  const cont=document.getElementById('plantilla-vista-previa');
+  const body=document.getElementById('plantilla-vista-previa-body');
+  if(!filas.length){cont.style.display='none';return;}
+
+  let bruto=0,noRem=0,retenciones=0;
+  const pendientes=[];
+  filas.forEach(f=>{
+    const tipo=clasificacionConcepto(f.codigo);
+    if(f.calculo==='pct'){
+      pendientes.push(f.codigo);
+      return;
+    }
+    if(tipo==='rem')bruto+=f.valor;
+    else if(tipo==='norem')noRem+=f.valor;
+    else if(tipo==='ded')retenciones+=f.valor;
+  });
+  const neto=bruto+noRem-retenciones;
+
+  let html=`
+    <div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Bruto (remunerativo)</span><strong>${mon(bruto)}</strong></div>
+    <div style="display:flex;justify-content:space-between;padding:3px 0;"><span>No Remunerativo</span><strong>${mon(noRem)}</strong></div>
+    <div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Retenciones</span><strong>-${mon(retenciones)}</strong></div>
+    <div style="display:flex;justify-content:space-between;padding:6px 0;border-top:1.5px solid var(--border);margin-top:4px;"><span><strong>Neto</strong></span><strong style="color:var(--navy2);">${mon(neto)}</strong></div>`;
+  if(pendientes.length){
+    html+=`<div style="margin-top:8px;font-size:12px;color:var(--text3);">⚠️ Los códigos ${pendientes.join(', ')} están configurados como "%" — todavía no se resuelven automáticamente (eso llega en la próxima fase, el motor de cálculo), así que no están incluidos en este total.</div>`;
+  }
+  body.innerHTML=html;
+  cont.style.display='block';
+}
+
 async function clonarPeriodoAnterior(){
   const periodoActual=document.getElementById('plantilla-periodo').value.trim();
   const tipo=document.getElementById('plantilla-tipo').value;
@@ -2716,6 +2759,11 @@ async function guardarPlantilla(){
     if(error)throw error;
     document.getElementById('plantilla-estado').textContent=`✅ Guardado: ${filas.length} concepto(s) para ${tipo} · ${periodo}.`;
     showToast(`✅ Plantilla guardada: ${filas.length} concepto(s) para ${tipo} · ${periodo}.`);
+    cerrarModal('modal-plantilla-empleado');
+    const preparacionVisible=document.getElementById('recibos-preparacion-container')?.style.display!=='none';
+    if(preparacionVisible&&document.getElementById('preparacion-periodo')?.value.trim()){
+      cargarRecibosPreparacion();
+    }
   }catch(err){
     console.error('Error guardando plantilla:',err);
     alert('No se pudo guardar la plantilla: '+err.message);
