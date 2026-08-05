@@ -539,6 +539,29 @@ tr:last-child td{border-bottom:none;}
         <div id="tabla-conceptos"><div class="loading">Seleccioná una empresa para ver sus conceptos.</div></div>
       </div>
 
+      <!-- CONVENIOS COLECTIVOS (catálogo compartido, no depende de empresa activa) -->
+      <div class="page" id="page-convenios">
+        <div class="page-title">Convenios Colectivos</div>
+        <div class="page-sub">Catálogo compartido para todo el estudio — no depende de la empresa seleccionada arriba.</div>
+        <div style="display:grid;grid-template-columns:1fr 1.3fr;gap:16px;">
+          <div>
+            <div class="card" style="padding:14px;margin-bottom:12px;">
+              <div style="display:flex;gap:8px;">
+                <input type="text" id="nuevo-convenio-nombre" placeholder="Nombre del convenio nuevo" style="flex:1;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+                <button class="btn-sm btn-gold" onclick="agregarConvenioDesdePanel()">+ Agregar</button>
+              </div>
+            </div>
+            <div id="lista-convenios"><div class="loading">Cargando...</div></div>
+          </div>
+          <div>
+            <div class="card" style="padding:14px;margin-bottom:12px;" id="panel-categorias-header">
+              <div style="font-size:13px;color:var(--text3);">← Elegí un convenio para ver y editar sus categorías</div>
+            </div>
+            <div id="lista-categorias"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- PANEL EMPLEADO -->
       <div class="page" id="page-empleado-recibos">
         <div class="page-title">Mis recibos</div>
@@ -1388,6 +1411,7 @@ function navTo(pageId,clickedEl){
   if(pageId==='page-empleados') cargarEmpleados();
   if(pageId==='page-contribuciones') cargarContribuciones();
   if(pageId==='page-conceptos') cargarConceptosEmpresa(empresaActivaId);
+  if(pageId==='page-convenios') cargarPageConvenios();
   if(pageId==='page-empleado-recibos') cargarRecibosEmpleado();
   if(pageId==='page-empleador-empleados') cargarEmpleadosEmpleador();
 }
@@ -1577,6 +1601,7 @@ async function initContador(){
     {icon:'📄',label:'Recibos',page:'page-recibos-contador'},
     {icon:'⚙️',label:'Contribuciones',page:'page-contribuciones'},
     {icon:'🔢',label:'Conceptos',page:'page-conceptos'},
+    {icon:'📚',label:'Convenios',page:'page-convenios'},
   ];
   if(currentUser.dobleRol){
     sidebarItems.push({section:'Mis recibos'});
@@ -2604,6 +2629,97 @@ async function generarPDFRecibo(reciboId,cerrarAlTerminar,esVistaEmpleado){
       await verRecibo(reciboId);
     }
   }
+}
+
+// ─── PÁGINA CONVENIOS COLECTIVOS (panel admin, catálogo compartido) ───
+let _convenioSeleccionadoPanelId=null;
+
+async function cargarPageConvenios(){
+  const{data}=await sb.from('convenios_colectivos').select('id,nombre').order('nombre');
+  const lista=document.getElementById('lista-convenios');
+  if(!data?.length){lista.innerHTML=`<div class="empty"><div class="empty-icon">📚</div><div class="empty-title">Todavía no hay convenios cargados</div></div>`;return;}
+  lista.innerHTML=`<div class="card"><table><thead><tr><th>Convenio</th><th></th></tr></thead><tbody>${
+    data.map(c=>`<tr style="cursor:pointer;${_convenioSeleccionadoPanelId===c.id?'background:var(--surface-1,#f8f9fb);':''}" onclick="seleccionarConvenioEnPanel('${c.id}','${c.nombre.replace(/'/g,"\\'")}')">
+      <td>${c.nombre}</td>
+      <td style="text-align:right;"><button class="btn-sm btn-outline" onclick="event.stopPropagation();eliminarConvenioPanel('${c.id}','${c.nombre.replace(/'/g,"\\'")}')">🗑️</button></td>
+    </tr>`).join('')
+  }</tbody></table></div>`;
+}
+
+async function agregarConvenioDesdePanel(){
+  const input=document.getElementById('nuevo-convenio-nombre');
+  const nombre=input.value.trim();
+  if(!nombre)return;
+  const{data:existentes}=await sb.from('convenios_colectivos').select('id,nombre');
+  const duplicado=existentes?.find(c=>c.nombre.toLowerCase()===nombre.toLowerCase());
+  if(duplicado){alert(`Ya existe un convenio "${duplicado.nombre}" en el catálogo.`);input.value='';return;}
+  const{error}=await sb.from('convenios_colectivos').insert({nombre});
+  if(error){alert('No se pudo agregar: '+error.message);return;}
+  input.value='';
+  showToast('✅ Convenio agregado.');
+  cargarPageConvenios();
+}
+
+async function eliminarConvenioPanel(id,nombre){
+  const{data:categoriasAsociadas}=await sb.from('categorias_convenio').select('id').eq('convenio_id',id);
+  const cantidad=categoriasAsociadas?.length||0;
+  const confirmado=confirm(`¿Eliminar el convenio "${nombre}"?${cantidad?`\n\nTiene ${cantidad} categoría(s) asociada(s), que también se van a eliminar.`:''}\n\nOjo: si algún legajo ya tiene este convenio/categoría escrito, ese texto queda igual en el legajo (no se borra), pero desaparece del catálogo para elegir en nuevos legajos.`);
+  if(!confirmado)return;
+  if(cantidad)await sb.from('categorias_convenio').delete().eq('convenio_id',id);
+  const{error}=await sb.from('convenios_colectivos').delete().eq('id',id);
+  if(error){alert('No se pudo eliminar: '+error.message);return;}
+  if(_convenioSeleccionadoPanelId===id){
+    _convenioSeleccionadoPanelId=null;
+    document.getElementById('lista-categorias').innerHTML='';
+    document.getElementById('panel-categorias-header').innerHTML='<div style="font-size:13px;color:var(--text3);">← Elegí un convenio para ver y editar sus categorías</div>';
+  }
+  showToast('🗑️ Convenio eliminado.');
+  cargarPageConvenios();
+}
+
+async function seleccionarConvenioEnPanel(id,nombre){
+  _convenioSeleccionadoPanelId=id;
+  document.getElementById('panel-categorias-header').innerHTML=`
+    <div style="font-weight:600;color:var(--navy2);margin-bottom:8px;">Categorías de "${nombre}"</div>
+    <div style="display:flex;gap:8px;">
+      <input type="text" id="nueva-categoria-nombre" placeholder="Nombre de la categoría nueva" style="flex:1;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+      <button class="btn-sm btn-gold" onclick="agregarCategoriaDesdePanel()">+ Agregar</button>
+    </div>`;
+  cargarPageConvenios();
+  await cargarListaCategoriasPanel();
+}
+
+async function cargarListaCategoriasPanel(){
+  if(!_convenioSeleccionadoPanelId)return;
+  const{data}=await sb.from('categorias_convenio').select('id,nombre').eq('convenio_id',_convenioSeleccionadoPanelId).order('nombre');
+  const lista=document.getElementById('lista-categorias');
+  if(!data?.length){lista.innerHTML=`<div class="empty"><div class="empty-icon">🏷️</div><div class="empty-title">Sin categorías todavía</div></div>`;return;}
+  lista.innerHTML=`<div class="card"><table><thead><tr><th>Categoría</th><th></th></tr></thead><tbody>${
+    data.map(c=>`<tr><td>${c.nombre}</td><td style="text-align:right;"><button class="btn-sm btn-outline" onclick="eliminarCategoriaPanel('${c.id}','${c.nombre.replace(/'/g,"\\'")}')">🗑️</button></td></tr>`).join('')
+  }</tbody></table></div>`;
+}
+
+async function agregarCategoriaDesdePanel(){
+  if(!_convenioSeleccionadoPanelId)return;
+  const input=document.getElementById('nueva-categoria-nombre');
+  const nombre=input.value.trim();
+  if(!nombre)return;
+  const{data:existentes}=await sb.from('categorias_convenio').select('id,nombre').eq('convenio_id',_convenioSeleccionadoPanelId);
+  const duplicado=existentes?.find(c=>c.nombre.toLowerCase()===nombre.toLowerCase());
+  if(duplicado){alert(`Ya existe la categoría "${duplicado.nombre}" en este convenio.`);input.value='';return;}
+  const{error}=await sb.from('categorias_convenio').insert({convenio_id:_convenioSeleccionadoPanelId,nombre});
+  if(error){alert('No se pudo agregar: '+error.message);return;}
+  input.value='';
+  showToast('✅ Categoría agregada.');
+  cargarListaCategoriasPanel();
+}
+
+async function eliminarCategoriaPanel(id,nombre){
+  if(!confirm(`¿Eliminar la categoría "${nombre}"?`))return;
+  const{error}=await sb.from('categorias_convenio').delete().eq('id',id);
+  if(error){alert('No se pudo eliminar: '+error.message);return;}
+  showToast('🗑️ Categoría eliminada.');
+  cargarListaCategoriasPanel();
 }
 
 // ─── CATÁLOGO DE CONVENIOS Y CATEGORÍAS ───
