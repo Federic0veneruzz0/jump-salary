@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<html lang="es"> 
+<html lang="es">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Jump Salary — Sistema de Recibos</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script> 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script> 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 :root {
   --navy: #0f1f3d;
@@ -3024,6 +3024,10 @@ async function guardarLegajo(){
       ({error}=await sb.from('legajo_empleado').insert(payload));
     }
     if(error)throw error;
+
+    // Sincronizamos empleados.activo con la situación de revista: "Baja" = inactivo, cualquier otra = activo
+    await sb.from('empleados').update({activo:payload.situacion_revista!=='baja'}).eq('id',_legajoEmpleadoId);
+
     showToast('✅ Legajo guardado correctamente.');
     cerrarModal('modal-legajo-empleado');
     if(document.getElementById('page-empleados')?.classList.contains('active')){
