@@ -379,10 +379,10 @@ tr:last-child td{border-bottom:none;}
         <div class="card">
           <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
             <span>Nómina</span>
-            <label style="font-size:13px;font-weight:400;display:flex;align-items:center;gap:6px;cursor:pointer;">
-              <input type="checkbox" id="chk-ver-inactivos" onchange="cargarTablaEmpleados(empresaActivaId)">
-              Mostrar también inactivos / dados de baja
-            </label>
+            <div style="display:flex;gap:8px;">
+              <button class="btn-sm" id="btn-empleados-activos" style="background:var(--navy2);color:#fff;" onclick="cambiarVistaEmpleados('activos')">Activos</button>
+              <button class="btn-sm btn-outline" id="btn-empleados-inactivos" onclick="cambiarVistaEmpleados('inactivos')">Dados de baja</button>
+            </div>
           </div>
           <div id="tabla-empleados"><div class="loading">Seleccioná una empresa para ver sus empleados.</div></div>
         </div>
@@ -457,10 +457,10 @@ tr:last-child td{border-bottom:none;}
         <div class="card">
           <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
             <span>Nómina</span>
-            <label style="font-size:13px;font-weight:400;display:flex;align-items:center;gap:6px;cursor:pointer;">
-              <input type="checkbox" id="chk-ver-inactivos-emp" onchange="cargarEmpleadosEmpleador()">
-              Mostrar también inactivos / dados de baja
-            </label>
+            <div style="display:flex;gap:8px;">
+              <button class="btn-sm" id="btn-empleados-activos-emp" style="background:var(--navy2);color:#fff;" onclick="cambiarVistaEmpleadosEmpleador('activos')">Activos</button>
+              <button class="btn-sm btn-outline" id="btn-empleados-inactivos-emp" onclick="cambiarVistaEmpleadosEmpleador('inactivos')">Dados de baja</button>
+            </div>
           </div>
           <div id="tabla-empleados-empleador"><div class="loading">Cargando...</div></div>
         </div>
@@ -1872,12 +1872,41 @@ async function importarARCAInterno(empId){
   cargarTablaEmpleados(empId);
 }
 
+// ─── PESTAÑAS ACTIVOS/INACTIVOS EN EMPLEADOS ───
+let _vistaEmpleadosContador='activos';
+let _vistaEmpleadosEmpleador='activos';
+
+function cambiarVistaEmpleados(vista){
+  _vistaEmpleadosContador=vista;
+  const btnAct=document.getElementById('btn-empleados-activos');
+  const btnInact=document.getElementById('btn-empleados-inactivos');
+  btnAct.className=vista==='activos'?'btn-sm':'btn-sm btn-outline';
+  btnAct.style.background=vista==='activos'?'var(--navy2)':'';
+  btnAct.style.color=vista==='activos'?'#fff':'';
+  btnInact.className=vista==='inactivos'?'btn-sm':'btn-sm btn-outline';
+  btnInact.style.background=vista==='inactivos'?'var(--navy2)':'';
+  btnInact.style.color=vista==='inactivos'?'#fff':'';
+  cargarTablaEmpleados(empresaActivaId);
+}
+
+function cambiarVistaEmpleadosEmpleador(vista){
+  _vistaEmpleadosEmpleador=vista;
+  const btnAct=document.getElementById('btn-empleados-activos-emp');
+  const btnInact=document.getElementById('btn-empleados-inactivos-emp');
+  btnAct.className=vista==='activos'?'btn-sm':'btn-sm btn-outline';
+  btnAct.style.background=vista==='activos'?'var(--navy2)':'';
+  btnAct.style.color=vista==='activos'?'#fff':'';
+  btnInact.className=vista==='inactivos'?'btn-sm':'btn-sm btn-outline';
+  btnInact.style.background=vista==='inactivos'?'var(--navy2)':'';
+  btnInact.style.color=vista==='inactivos'?'#fff':'';
+  cargarEmpleadosEmpleador();
+}
+
 async function cargarTablaEmpleados(empId){
-  const verInactivos=document.getElementById('chk-ver-inactivos')?.checked;
   let q=sb.from('empleados').select('*').eq('empresa_id',empId).order('nombre');
-  if(!verInactivos) q=q.eq('activo',true);
+  q=q.eq('activo',_vistaEmpleadosContador==='activos');
   const{data:empleados}=await q;
-  if(!empleados?.length){document.getElementById('tabla-empleados').innerHTML=`<div class="empty"><div class="empty-icon">👥</div><div class="empty-title">Sin empleados</div><div class="empty-sub">Importalos desde ARCA.</div></div>`;return;}
+  if(!empleados?.length){document.getElementById('tabla-empleados').innerHTML=`<div class="empty"><div class="empty-icon">👥</div><div class="empty-title">Sin empleados ${_vistaEmpleadosContador==='activos'?'activos':'dados de baja'}</div>${_vistaEmpleadosContador==='activos'?'<div class="empty-sub">Importalos desde ARCA.</div>':''}</div>`;return;}
   const cuils=empleados.map(e=>nc(e.cuil));
   const{data:usuariosData}=await sb.from('usuarios').select('cuit_cuil,email,primer_acceso').in('cuit_cuil',cuils);
   const mapUsuarios={};
@@ -1914,11 +1943,10 @@ async function resetearAccesoEmpleado(empleadoId,nombre){
 
 // ─── EMPLEADOR: NÓMINA DE SU PROPIA EMPRESA ───
 async function cargarEmpleadosEmpleador(){
-  const verInactivos=document.getElementById('chk-ver-inactivos-emp')?.checked;
   let q=sb.from('empleados').select('*').eq('empresa_id',currentUser.empresa_id).order('nombre');
-  if(!verInactivos) q=q.eq('activo',true);
+  q=q.eq('activo',_vistaEmpleadosEmpleador==='activos');
   const{data:empleados}=await q;
-  if(!empleados?.length){document.getElementById('tabla-empleados-empleador').innerHTML=`<div class="empty"><div class="empty-icon">👥</div><div class="empty-title">Sin empleados</div></div>`;return;}
+  if(!empleados?.length){document.getElementById('tabla-empleados-empleador').innerHTML=`<div class="empty"><div class="empty-icon">👥</div><div class="empty-title">Sin empleados ${_vistaEmpleadosEmpleador==='activos'?'activos':'dados de baja'}</div></div>`;return;}
   const cuils=empleados.map(e=>nc(e.cuil));
   const{data:usuariosData}=await sb.from('usuarios').select('cuit_cuil,email,primer_acceso').in('cuit_cuil',cuils);
   const mapUsuarios={};
@@ -2382,30 +2410,46 @@ async function aprobarRecibo(reciboId){
   cerrarModal('modal-ver-recibo');
   showToast('✅ Recibo aprobado correctamente.');
   await refrescarVistaRecibos();
-  notificarRecibo(reciboId).catch(err=>console.error('No se pudo enviar el aviso por email:',err));
+  procesarPosAprobacion(reciboId).catch(err=>console.error('Error en procesos posteriores a la aprobación:',err));
 }
 
-async function notificarRecibo(reciboId){
-  const{data:r}=await sb.from('recibos').select('periodo,tipo,empleado_id,empleados(nombre,cuil)').eq('id',reciboId).maybeSingle();
+async function procesarPosAprobacion(reciboId){
+  const{data:r}=await sb.from('recibos').select('periodo,tipo,empleado_id,empresa_id,datos_json,empleados(nombre,cuil)').eq('id',reciboId).maybeSingle();
   if(!r?.empleado_id)return;
+
+  // Aviso por email
   const{data:usuario}=await sb.from('usuarios').select('email').eq('empleado_id',r.empleado_id).maybeSingle();
-  if(!usuario?.email){
+  if(usuario?.email){
+    const{data,error}=await sb.functions.invoke('notificar-recibo',{
+      body:{
+        email:usuario.email,
+        nombre:r.empleados?.nombre||'',
+        periodo:r.periodo||'',
+        tipo:r.tipo||'sueldo',
+      }
+    });
+    if(error) console.error('Error al invocar notificar-recibo:',error);
+    else console.info('Aviso de recibo enviado:',data);
+  } else {
     console.info('No se envió aviso: el empleado no tiene email registrado.');
-    return;
   }
-  const{data,error}=await sb.functions.invoke('notificar-recibo',{
-    body:{
-      email:usuario.email,
-      nombre:r.empleados?.nombre||'',
-      periodo:r.periodo||'',
-      tipo:r.tipo||'sueldo',
+
+  // Baja automática si es Liquidación Final
+  const esLiquidacionFinal=/liq/i.test(r.tipo||'')&&/final/i.test(r.tipo||'');
+  if(esLiquidacionFinal){
+    const fechaBajaRaw=r.datos_json?.['Fecha Baja'];
+    const fechaBajaISO=fechaBajaRaw?fechaBajaRaw.split('/').reverse().join('-'):null;
+
+    await sb.from('empleados').update({activo:false}).eq('id',r.empleado_id);
+
+    const{data:legajoExiste}=await sb.from('legajo_empleado').select('id').eq('empleado_id',r.empleado_id).maybeSingle();
+    if(legajoExiste){
+      await sb.from('legajo_empleado').update({situacion_revista:'baja',fecha_baja:fechaBajaISO}).eq('empleado_id',r.empleado_id);
+    } else {
+      await sb.from('legajo_empleado').insert({empresa_id:r.empresa_id,empleado_id:r.empleado_id,situacion_revista:'baja',fecha_baja:fechaBajaISO});
     }
-  });
-  if(error){
-    console.error('Error al invocar notificar-recibo:',error);
-    return;
+    console.info(`Empleado marcado como inactivo por Liquidación Final (fecha de baja: ${fechaBajaISO||'no informada en el recibo'}).`);
   }
-  console.info('Aviso de recibo enviado:',data);
 }
 
 // ─── RECHAZAR RECIBO (empleador) ───
