@@ -702,6 +702,7 @@ tr:last-child td{border-bottom:none;}
       </table>
     </div>
     <button class="btn-sm btn-outline" style="margin-top:10px;" onclick="agregarFilaPlantilla()">+ Agregar concepto</button>
+    <datalist id="datalist-conceptos-nombres"></datalist>
 
     <div id="plantilla-vista-previa" style="display:none;margin-top:16px;padding:14px;background:var(--surface-1,#f8f9fb);border-radius:var(--radius);">
       <div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Vista previa (a partir de lo cargado en la grilla)</div>
@@ -3162,7 +3163,7 @@ function nombreConcepto(codigo){
 function filaPlantillaHTML(f){
   f=f||{codigo:'',calculo:'fijo',valor:'',base_codigo:''};
   return `<tr>
-    <td style="padding:4px 6px;"><input type="text" class="pl-codigo" value="${f.codigo||''}" style="width:60px;padding:6px;border:1.5px solid var(--border);border-radius:6px;" oninput="this.closest('tr').querySelector('.pl-nombre-ref').textContent=nombreConcepto(this.value)"></td>
+    <td style="padding:4px 6px;"><input type="text" class="pl-codigo" list="datalist-conceptos-nombres" placeholder="cód. o nombre" value="${f.codigo||''}" style="width:110px;padding:6px;border:1.5px solid var(--border);border-radius:6px;" oninput="onInputCodigoPlantilla(this)"></td>
     <td style="padding:4px 6px;"><span class="pl-nombre-ref" style="color:var(--text3);font-size:12px;">${nombreConcepto(f.codigo)}</span></td>
     <td style="padding:4px 6px;"><select class="pl-calculo" style="padding:6px;border:1.5px solid var(--border);border-radius:6px;">
       <option value="fijo" ${f.calculo==='fijo'?'selected':''}>Fijo</option>
@@ -3173,6 +3174,48 @@ function filaPlantillaHTML(f){
     <td style="padding:4px 6px;"><button class="btn-sm btn-outline" onclick="this.closest('tr').remove()">✕</button></td>
   </tr>`;
 }
+
+// Si el usuario tipeó un nombre (no un código numérico) y ese nombre coincide
+// exactamente con un concepto conocido (por haberlo elegido del datalist), se
+// reemplaza el valor del campo por el código real. Si tipeó un código, solo
+// actualiza la referencia de nombre a la derecha.
+function onInputCodigoPlantilla(input){
+  const val=input.value.trim();
+  if(!/^\d+$/.test(val)){
+    const codigoEncontrado=buscarCodigoPorNombre(val);
+    if(codigoEncontrado)input.value=codigoEncontrado;
+  }
+  input.closest('tr').querySelector('.pl-nombre-ref').textContent=nombreConcepto(input.value.trim());
+}
+
+function buscarCodigoPorNombre(nombre){
+  const nombreNorm=nombre.trim().toLowerCase();
+  if(!nombreNorm)return null;
+  const propio=Object.entries(_plantillaMapPropio||{}).find(([,c])=>(c.nombre||'').trim().toLowerCase()===nombreNorm);
+  if(propio)return propio[0];
+  const generico=Object.entries(conceptosMap||{}).find(([,c])=>(c.nombre||'').trim().toLowerCase()===nombreNorm);
+  if(generico)return generico[0];
+  return null;
+}
+
+function poblarDatalistConceptos(){
+  const dl=document.getElementById('datalist-conceptos-nombres');
+  if(!dl)return;
+  const vistos=new Set();
+  const opciones=[];
+  Object.entries(_plantillaMapPropio||{}).forEach(([cod,c])=>{
+    if(!c.nombre||vistos.has(cod))return;
+    vistos.add(cod);
+    opciones.push(`<option value="${cod}">${(c.nombre||'').replace(/"/g,'&quot;')}</option>`);
+  });
+  Object.entries(conceptosMap||{}).forEach(([cod,c])=>{
+    if(!c.nombre||vistos.has(cod))return;
+    vistos.add(cod);
+    opciones.push(`<option value="${cod}">${(c.nombre||'').replace(/"/g,'&quot;')}</option>`);
+  });
+  dl.innerHTML=opciones.join('');
+}
+
 
 function agregarFilaPlantilla(datos){
   document.getElementById('plantilla-filas').insertAdjacentHTML('beforeend',filaPlantillaHTML(datos));
@@ -3200,6 +3243,7 @@ async function abrirPlantillaEmpleado(empleadoId,nombre,periodoDefault){
   const{data:conceptosPropios}=await sb.from('conceptos_empresa').select('codigo,nombre,tipo,calculo,porcentaje,base_codigo').eq('empresa_id',empresaActivaId);
   _plantillaMapPropio={};
   conceptosPropios?.forEach(c=>_plantillaMapPropio[c.codigo]=c);
+  poblarDatalistConceptos();
 
   if(periodoDefault)await cargarFilasPlantilla();
   abrirModal('modal-plantilla-empleado');
