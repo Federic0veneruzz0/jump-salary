@@ -3232,33 +3232,85 @@ function ordenarFilasPorTipo(filas){
   return[...filas].sort((a,b)=>ordenTipoConcepto(clasificacionConcepto(a.codigo))-ordenTipoConcepto(clasificacionConcepto(b.codigo)));
 }
 
+// ─── MOTOR DE CÁLCULO: resuelve conceptos "%" contra un concepto base específico
+// (base_codigo) o contra el bruto remunerativo (solo los conceptos FIJOS de tipo
+// "rem" — los % nunca se calculan en cadena unos sobre otros, para que el orden de
+// las filas no cambie el resultado). Devuelve el importe final de cada fila.
+function resolverConceptosPlantilla(filas){
+  const resueltos={};   // codigo -> importe final
+  const pctFilas=[];
+  filas.forEach(f=>{
+    if(f.calculo==='pct')pctFilas.push(f);
+    else resueltos[f.codigo]=f.valor;
+  });
+
+  // Bruto remunerativo = solo conceptos FIJOS de tipo "rem" (nunca otros % ya resueltos)
+  const bruto=filas.filter(f=>f.calculo!=='pct'&&clasificacionConcepto(f.codigo)==='rem')
+    .reduce((s,f)=>s+f.valor,0);
+
+  // Resolver primero los % con base_codigo explícito hacia otro concepto (puede
+  // haber cadenas: 211 se basa en 416, y a su vez otro podría basarse en 211).
+  let cambio=true,vueltas=0;
+  while(cambio&&vueltas<10){
+    cambio=false;vueltas++;
+    pctFilas.forEach(f=>{
+      if(resueltos[f.codigo]!=null)return;
+      if(f.base_codigo){
+        if(resueltos[f.base_codigo]!=null){
+          resueltos[f.codigo]=Math.round(resueltos[f.base_codigo]*f.valor/100*100)/100;
+          cambio=true;
+        }
+      } else {
+        resueltos[f.codigo]=Math.round(bruto*f.valor/100*100)/100;
+        cambio=true;
+      }
+    });
+  }
+
+  const sinResolver=pctFilas.filter(f=>resueltos[f.codigo]==null).map(f=>f.codigo);
+  return{resueltos,bruto,sinResolver};
+}
+
 function verVistaPreviaPlantilla(){
   const filas=leerFilasPlantillaUI();
   const cont=document.getElementById('plantilla-vista-previa');
   const body=document.getElementById('plantilla-vista-previa-body');
   if(!filas.length){cont.style.display='none';return;}
 
-  let bruto=0,noRem=0,retenciones=0;
-  const pendientes=[];
+  const{resueltos,bruto,sinResolver}=resolverConceptosPlantilla(filas);
+
+  let brutoFinal=0,noRem=0,retenciones=0;
   filas.forEach(f=>{
     const tipo=clasificacionConcepto(f.codigo);
-    if(f.calculo==='pct'){
-      pendientes.push(f.codigo);
-      return;
-    }
-    if(tipo==='rem')bruto+=f.valor;
-    else if(tipo==='norem')noRem+=f.valor;
-    else if(tipo==='ded')retenciones+=f.valor;
+    const importe=resueltos[f.codigo];
+    if(importe==null)return; // no se pudo resolver (base_codigo inexistente en la plantilla)
+    if(tipo==='rem')brutoFinal+=importe;
+    else if(tipo==='norem')noRem+=importe;
+    else if(tipo==='ded')retenciones+=importe;
   });
-  const neto=bruto+noRem-retenciones;
+  const neto=brutoFinal+noRem-retenciones;
+
+  const filasOrdenadas=ordenarFilasPorTipo(filas);
+  const detalleHtml=filasOrdenadas.map(f=>{
+    const importe=resueltos[f.codigo];
+    const nombre=nombreConcepto(f.codigo);
+    const origenTexto=f.calculo!=='pct'?'Fijo'
+      :f.base_codigo?(resueltos[f.base_codigo]!=null?`${f.valor}% de ${mon(resueltos[f.base_codigo])} (conc. ${f.base_codigo})`:`⚠️ ${f.valor}% de conc. ${f.base_codigo} — no está en la plantilla`)
+      :`${f.valor}% de ${mon(bruto)} (bruto fijo)`;
+    return `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px;border-bottom:0.5px solid var(--border);">
+      <span><span style="color:var(--text3);">${f.codigo}</span> ${nombre} <span style="color:var(--text3);font-size:11px;">— ${origenTexto}</span></span>
+      <strong>${importe!=null?mon(importe):'—'}</strong>
+    </div>`;
+  }).join('');
 
   let html=`
-    <div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Bruto (remunerativo)</span><strong>${mon(bruto)}</strong></div>
+    <div style="margin-bottom:8px;">${detalleHtml}</div>
+    <div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Bruto (remunerativo)</span><strong>${mon(brutoFinal)}</strong></div>
     <div style="display:flex;justify-content:space-between;padding:3px 0;"><span>No Remunerativo</span><strong>${mon(noRem)}</strong></div>
     <div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Retenciones</span><strong>-${mon(retenciones)}</strong></div>
     <div style="display:flex;justify-content:space-between;padding:6px 0;border-top:1.5px solid var(--border);margin-top:4px;"><span><strong>Neto</strong></span><strong style="color:var(--navy2);">${mon(neto)}</strong></div>`;
-  if(pendientes.length){
-    html+=`<div style="margin-top:8px;font-size:12px;color:var(--text3);">⚠️ Los códigos ${pendientes.join(', ')} están configurados como "%" — todavía no se resuelven automáticamente (eso llega en la próxima fase, el motor de cálculo), así que no están incluidos en este total.</div>`;
+  if(sinResolver.length){
+    html+=`<div style="margin-top:8px;font-size:12px;color:var(--danger);">⚠️ No se pudieron calcular los códigos ${sinResolver.join(', ')} porque el concepto base que referencian no está cargado en esta plantilla. Agregalo o corregí el código base.</div>`;
   }
   body.innerHTML=html;
   cont.style.display='block';
