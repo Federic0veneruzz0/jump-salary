@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Jump Salary — Sistema de Recibos</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script> 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -792,6 +792,19 @@ tr:last-child td{border-bottom:none;}
     <div class="modal-actions">
       <button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-revocar')">Cancelar</button>
       <button class="btn-sm btn-danger" style="flex:1;" onclick="confirmarRevocacion()">Revocar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL ELIMINAR RECIBO -->
+<div class="modal-overlay" id="modal-eliminar-recibo">
+  <div class="modal">
+    <div class="modal-title">Eliminar recibo</div>
+    <div class="modal-sub">Esta acción borra el recibo definitivamente. No se puede deshacer.</div>
+    <div class="field"><label>Motivo (queda registrado en el historial)</label><textarea id="motivo-eliminacion" rows="3" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:14px;" placeholder="Ej: Recibo de prueba subido para probar el aviso por mail..."></textarea></div>
+    <div class="modal-actions">
+      <button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-eliminar-recibo')">Cancelar</button>
+      <button class="btn-sm btn-danger" style="flex:1;" onclick="confirmarEliminacionRecibo()">Eliminar definitivamente</button>
     </div>
   </div>
 </div>
@@ -1789,6 +1802,7 @@ async function cargarRecibosContador(){
   const{data:constancias}=recibos?.length?await sb.from('constancias').select('recibo_id,fecha_firma').in('recibo_id',recibos.map(r=>r.id)):{data:[]};
   const firmaPorRecibo={};
   constancias?.forEach(c=>{firmaPorRecibo[c.recibo_id]=c.fecha_firma;});
+  const puedeEliminarRecibos=currentUser.es_admin===true||currentUser.es_admin==='true'||adminOriginal!==null;
 
   if(!recibos?.length){document.getElementById('tabla-recibos-contador').innerHTML=`<div class="empty"><div class="empty-icon">📄</div><div class="empty-title">Sin recibos</div></div>`;return;}
   let html=`<div class="card"><table><thead><tr><th><input type="checkbox" class="chk-todos" onchange="toggleSeleccionarTodos(this)" title="Seleccionar todos"></th><th>Empleado</th><th>Empresa</th><th>Período</th><th>Tipo</th><th>Neto</th><th>Estado</th><th>Firma</th><th></th></tr></thead><tbody>`;
@@ -1817,7 +1831,8 @@ async function cargarRecibosContador(){
       <td>${firmaHtml}</td>
       <td style="white-space:nowrap;">
         <button class="btn-sm btn-outline" style="margin-right:5px;" onclick="verRecibo('${r.id}')">Ver</button>
-        ${r.estado==='publicado'?`<button class="btn-sm btn-danger" onclick="iniciarRevocacion('${r.id}')">Revocar</button>`:''}
+        ${r.estado==='publicado'?`<button class="btn-sm btn-danger" style="margin-right:5px;" onclick="iniciarRevocacion('${r.id}')">Revocar</button>`:''}
+        ${puedeEliminarRecibos&&(r.estado==='borrador'||r.estado==='revocado')?`<button class="btn-sm btn-danger" onclick="iniciarEliminacionRecibo('${r.id}')" title="Solo admin de plataforma">🗑️</button>`:''}
       </td>
     </tr>`;
   });
@@ -2482,6 +2497,44 @@ async function confirmarRevocacion(){
   cerrarModal('modal-revocar');
   reciboARevocar=null;
   showToast('🚫 Recibo revocado correctamente.','warn');
+  cargarRecibosContador();
+}
+
+// ─── ELIMINAR RECIBO (solo admin de plataforma, borrador/revocado) ───
+let reciboAEliminar=null;
+function iniciarEliminacionRecibo(reciboId){
+  reciboAEliminar=reciboId;
+  document.getElementById('motivo-eliminacion').value='';
+  abrirModal('modal-eliminar-recibo');
+}
+async function confirmarEliminacionRecibo(){
+  const puedeEliminarRecibos=currentUser.es_admin===true||currentUser.es_admin==='true'||adminOriginal!==null;
+  if(!puedeEliminarRecibos){alert('Solo el administrador de la plataforma puede eliminar recibos.');return;}
+  const motivo=document.getElementById('motivo-eliminacion').value.trim();
+  if(!motivo){alert('Ingresá el motivo de eliminación.');return;}
+
+  const{data:recibo}=await sb.from('recibos').select('*').eq('id',reciboAEliminar).maybeSingle();
+  if(!recibo){alert('No se encontró el recibo.');return;}
+  if(recibo.estado==='publicado'){alert('No se puede eliminar un recibo publicado. Revocalo primero.');return;}
+
+  // Snapshot en el historial antes de borrar, para poder auditar qué se eliminó
+  await sb.from('recibo_historial').insert({
+    recibo_id:reciboAEliminar,
+    accion:'eliminado',
+    usuario_id:currentUser.id,
+    motivo,
+    snapshot:recibo
+  });
+
+  const{error}=await sb.from('recibos').delete().eq('id',reciboAEliminar);
+  if(error){
+    console.error('Error al eliminar recibo:',error);
+    alert('No se pudo eliminar el recibo: '+error.message);
+    return;
+  }
+  cerrarModal('modal-eliminar-recibo');
+  reciboAEliminar=null;
+  showToast('🗑️ Recibo eliminado definitivamente.','warn');
   cargarRecibosContador();
 }
 
