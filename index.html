@@ -2845,11 +2845,27 @@ async function seleccionarConvenioEnPanel(id,nombre){
     <div style="font-weight:600;color:var(--navy2);margin-bottom:8px;">Categorías de "${nombre}"</div>
     <div style="display:flex;gap:8px;">
       <input type="text" id="nueva-categoria-nombre" placeholder="Nombre de la categoría nueva" style="flex:1;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
-      <input type="number" step="0.01" id="nueva-categoria-basico" placeholder="Básico (opcional)" style="width:160px;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+      <input type="text" inputmode="decimal" id="nueva-categoria-basico" placeholder="Básico (opcional)" style="width:160px;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;text-align:right;" onblur="onBlurMontoInput(this)">
       <button class="btn-sm btn-gold" onclick="agregarCategoriaDesdePanel()">+ Agregar</button>
     </div>`;
   cargarPageConvenios();
   await cargarListaCategoriasPanel();
+}
+
+function formatearNumeroAR(v){
+  if(v==null||v==='')return '';
+  return Number(v).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function parsearNumeroAR(str){
+  if(str==null)return null;
+  const limpio=String(str).trim().replace(/\./g,'').replace(',','.');
+  if(limpio==='')return null;
+  const num=parseFloat(limpio);
+  return isNaN(num)?null:num;
+}
+function onBlurMontoInput(input){
+  const num=parsearNumeroAR(input.value);
+  input.value=num!=null?formatearNumeroAR(num):'';
 }
 
 async function cargarListaCategoriasPanel(){
@@ -2863,7 +2879,7 @@ async function cargarListaCategoriasPanel(){
   if(!data?.length){lista.innerHTML=`<div class="empty"><div class="empty-icon">🏷️</div><div class="empty-title">Sin categorías todavía</div></div>`;return;}
   lista.innerHTML=`<div class="card"><table><thead><tr><th>Categoría</th><th>Básico</th><th></th></tr></thead><tbody>${
     data.map(c=>`<tr><td>${c.nombre}</td><td>
-      <input type="number" step="0.01" value="${c.sueldo_basico??''}" placeholder="—" style="width:130px;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;" onchange="actualizarBasicoCategoria('${c.id}',this.value)">
+      <input type="text" inputmode="decimal" value="${formatearNumeroAR(c.sueldo_basico)}" placeholder="—" style="width:130px;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;text-align:right;" onfocus="this.select()" onblur="onBlurMontoInput(this);actualizarBasicoCategoria('${c.id}',this.value)">
     </td><td style="text-align:right;white-space:nowrap;">
       <button class="btn-sm btn-outline" onclick="editarCategoriaPanel('${c.id}','${c.nombre.replace(/'/g,"\\'")}')">✏️</button>
       <button class="btn-sm btn-outline" onclick="eliminarCategoriaPanel('${c.id}','${c.nombre.replace(/'/g,"\\'")}')">🗑️</button>
@@ -2872,7 +2888,7 @@ async function cargarListaCategoriasPanel(){
 }
 
 async function actualizarBasicoCategoria(id,valorStr){
-  const basico=valorStr.trim()===''?null:parseFloat(valorStr);
+  const basico=parsearNumeroAR(valorStr);
   const{error}=await sb.from('categorias_convenio').update({sueldo_basico:basico}).eq('id',id);
   if(error){alert('No se pudo guardar el básico: '+error.message);return;}
   showToast('✅ Básico actualizado.');
@@ -2884,7 +2900,7 @@ async function agregarCategoriaDesdePanel(){
   const inputBasico=document.getElementById('nueva-categoria-basico');
   const nombre=input.value.trim();
   if(!nombre)return;
-  const basico=inputBasico.value?parseFloat(inputBasico.value):null;
+  const basico=inputBasico.value?parsearNumeroAR(inputBasico.value):null;
   const{data:existentes}=await sb.from('categorias_convenio').select('id,nombre').eq('convenio_id',_convenioSeleccionadoPanelId);
   const duplicado=existentes?.find(c=>c.nombre.toLowerCase()===nombre.toLowerCase());
   if(duplicado){alert(`Ya existe la categoría "${duplicado.nombre}" en este convenio.`);input.value='';return;}
