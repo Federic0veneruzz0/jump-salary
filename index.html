@@ -3154,6 +3154,16 @@ async function cargarRecibosPreparacion(){
 let _plantillaEmpleadoId=null;
 let _plantillaEmpleadoNombre='';
 let _plantillaMapPropio={};
+let _plantillaSueldoBasico=null; // sueldo básico del legajo del empleado, para autocompletar
+
+function normalizarTexto(s){
+  return(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+
+function esConceptoBasico(codigo){
+  const nombre=normalizarTexto(nombreConcepto(codigo));
+  return nombre.includes('basico');
+}
 
 function nombreConcepto(codigo){
   const mapPropio=_plantillaMapPropio||{};
@@ -3162,9 +3172,12 @@ function nombreConcepto(codigo){
 
 function filaPlantillaHTML(f){
   f=f||{codigo:'',calculo:'fijo',valor:'',base_codigo:''};
+  const nombreRef=esConceptoBasico(f.codigo)&&_plantillaSueldoBasico!=null
+    ?`${nombreConcepto(f.codigo)} (legajo: ${mon(_plantillaSueldoBasico)})`
+    :nombreConcepto(f.codigo);
   return `<tr>
     <td style="padding:4px 6px;"><input type="text" class="pl-codigo" list="datalist-conceptos-nombres" placeholder="cód. o nombre" value="${f.codigo||''}" style="width:110px;padding:6px;border:1.5px solid var(--border);border-radius:6px;" oninput="onInputCodigoPlantilla(this)"></td>
-    <td style="padding:4px 6px;"><span class="pl-nombre-ref" style="color:var(--text3);font-size:12px;">${nombreConcepto(f.codigo)}</span></td>
+    <td style="padding:4px 6px;"><span class="pl-nombre-ref" style="color:var(--text3);font-size:12px;">${nombreRef}</span></td>
     <td style="padding:4px 6px;"><select class="pl-calculo" style="padding:6px;border:1.5px solid var(--border);border-radius:6px;">
       <option value="fijo" ${f.calculo==='fijo'?'selected':''}>Fijo</option>
       <option value="pct" ${f.calculo==='pct'?'selected':''}>%</option>
@@ -3178,14 +3191,28 @@ function filaPlantillaHTML(f){
 // Si el usuario tipeó un nombre (no un código numérico) y ese nombre coincide
 // exactamente con un concepto conocido (por haberlo elegido del datalist), se
 // reemplaza el valor del campo por el código real. Si tipeó un código, solo
-// actualiza la referencia de nombre a la derecha.
+// actualiza la referencia de nombre a la derecha. Si el concepto resuelto es
+// el "Sueldo Básico" y el campo Valor está vacío, lo autocompleta con el
+// básico que figura en el legajo del empleado.
 function onInputCodigoPlantilla(input){
   const val=input.value.trim();
   if(!/^\d+$/.test(val)){
     const codigoEncontrado=buscarCodigoPorNombre(val);
     if(codigoEncontrado)input.value=codigoEncontrado;
   }
-  input.closest('tr').querySelector('.pl-nombre-ref').textContent=nombreConcepto(input.value.trim());
+  const codigoFinal=input.value.trim();
+  const tr=input.closest('tr');
+  tr.querySelector('.pl-nombre-ref').textContent=nombreConcepto(codigoFinal);
+
+  if(esConceptoBasico(codigoFinal)&&_plantillaSueldoBasico!=null){
+    const inputValor=tr.querySelector('.pl-valor');
+    if(!inputValor.value){
+      inputValor.value=_plantillaSueldoBasico;
+      inputValor.style.background='#FFF8E1';
+      setTimeout(()=>{inputValor.style.background='';},1500);
+    }
+    tr.querySelector('.pl-nombre-ref').textContent+=` (legajo: ${mon(_plantillaSueldoBasico)})`;
+  }
 }
 
 function buscarCodigoPorNombre(nombre){
@@ -3244,6 +3271,9 @@ async function abrirPlantillaEmpleado(empleadoId,nombre,periodoDefault){
   _plantillaMapPropio={};
   conceptosPropios?.forEach(c=>_plantillaMapPropio[c.codigo]=c);
   poblarDatalistConceptos();
+
+  const{data:legajo}=await sb.from('legajo_empleado').select('sueldo_basico').eq('empleado_id',empleadoId).maybeSingle();
+  _plantillaSueldoBasico=legajo?.sueldo_basico??null;
 
   if(periodoDefault)await cargarFilasPlantilla();
   abrirModal('modal-plantilla-empleado');
