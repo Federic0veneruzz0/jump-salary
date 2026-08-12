@@ -703,6 +703,9 @@ tr:last-child td{border-bottom:none;}
     </div>
     <button class="btn-sm btn-outline" style="margin-top:10px;" onclick="agregarFilaPlantilla()">+ Agregar concepto</button>
     <datalist id="datalist-conceptos-nombres"></datalist>
+    <datalist id="datalist-bases-especiales">
+      <option value="legajo_os">Base Obra Social jornada completa (del legajo)</option>
+    </datalist>
 
     <div id="plantilla-vista-previa" style="display:none;margin-top:16px;padding:14px;background:var(--surface-1,#f8f9fb);border-radius:var(--radius);">
       <div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Vista previa (a partir de lo cargado en la grilla)</div>
@@ -752,7 +755,16 @@ tr:last-child td{border-bottom:none;}
       </div>
       <div class="field" style="margin-bottom:0;">
         <label>Sueldo Básico vigente</label>
-        <input type="number" step="0.01" id="legajo-basico" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+        <div style="display:flex;gap:6px;align-items:center;">
+          <input type="number" step="0.01" id="legajo-basico" style="flex:1;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+          <button type="button" class="btn-sm btn-outline" title="Usar el básico cargado para este puesto en Convenios" onclick="usarBasicoDeCategoria()">📋</button>
+        </div>
+        <div id="legajo-basico-hint" style="font-size:11px;color:var(--text3);margin-top:3px;"></div>
+      </div>
+      <div class="field" style="margin-bottom:0;">
+        <label>Base Obra Social — jornada completa <span style="font-weight:400;color:var(--text3);font-size:11px;">(opcional)</span></label>
+        <input type="number" step="0.01" id="legajo-base-os" placeholder="dejar vacío si aporta sobre su básico real" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+        <div style="font-size:11px;color:var(--text3);margin-top:3px;">Completar solo si trabaja media jornada / part-time y por convenio tiene que aportar obra social como si fuera jornada completa. Se usa como base especial en la plantilla ("legajo_os").</div>
       </div>
       <div class="field" style="margin-bottom:0;">
         <label>Obra Social</label>
@@ -2833,6 +2845,7 @@ async function seleccionarConvenioEnPanel(id,nombre){
     <div style="font-weight:600;color:var(--navy2);margin-bottom:8px;">Categorías de "${nombre}"</div>
     <div style="display:flex;gap:8px;">
       <input type="text" id="nueva-categoria-nombre" placeholder="Nombre de la categoría nueva" style="flex:1;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+      <input type="number" step="0.01" id="nueva-categoria-basico" placeholder="Básico (opcional)" style="width:160px;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
       <button class="btn-sm btn-gold" onclick="agregarCategoriaDesdePanel()">+ Agregar</button>
     </div>`;
   cargarPageConvenios();
@@ -2841,12 +2854,12 @@ async function seleccionarConvenioEnPanel(id,nombre){
 
 async function cargarListaCategoriasPanel(){
   if(!_convenioSeleccionadoPanelId)return;
-  const{data}=await sb.from('categorias_convenio').select('id,nombre').eq('convenio_id',_convenioSeleccionadoPanelId).order('nombre');
+  const{data}=await sb.from('categorias_convenio').select('id,nombre,sueldo_basico').eq('convenio_id',_convenioSeleccionadoPanelId).order('nombre');
   const lista=document.getElementById('lista-categorias');
   if(!data?.length){lista.innerHTML=`<div class="empty"><div class="empty-icon">🏷️</div><div class="empty-title">Sin categorías todavía</div></div>`;return;}
-  lista.innerHTML=`<div class="card"><table><thead><tr><th>Categoría</th><th></th></tr></thead><tbody>${
-    data.map(c=>`<tr><td>${c.nombre}</td><td style="text-align:right;white-space:nowrap;">
-      <button class="btn-sm btn-outline" onclick="editarCategoriaPanel('${c.id}','${c.nombre.replace(/'/g,"\\'")}')">✏️</button>
+  lista.innerHTML=`<div class="card"><table><thead><tr><th>Categoría</th><th>Básico</th><th></th></tr></thead><tbody>${
+    data.map(c=>`<tr><td>${c.nombre}</td><td>${c.sueldo_basico!=null?mon(c.sueldo_basico):'<span style="color:var(--text3);">—</span>'}</td><td style="text-align:right;white-space:nowrap;">
+      <button class="btn-sm btn-outline" onclick="editarCategoriaPanel('${c.id}','${c.nombre.replace(/'/g,"\\'")}',${c.sueldo_basico??'null'})">✏️</button>
       <button class="btn-sm btn-outline" onclick="eliminarCategoriaPanel('${c.id}','${c.nombre.replace(/'/g,"\\'")}')">🗑️</button>
     </td></tr>`).join('')
   }</tbody></table></div>`;
@@ -2855,30 +2868,36 @@ async function cargarListaCategoriasPanel(){
 async function agregarCategoriaDesdePanel(){
   if(!_convenioSeleccionadoPanelId)return;
   const input=document.getElementById('nueva-categoria-nombre');
+  const inputBasico=document.getElementById('nueva-categoria-basico');
   const nombre=input.value.trim();
   if(!nombre)return;
+  const basico=inputBasico.value?parseFloat(inputBasico.value):null;
   const{data:existentes}=await sb.from('categorias_convenio').select('id,nombre').eq('convenio_id',_convenioSeleccionadoPanelId);
   const duplicado=existentes?.find(c=>c.nombre.toLowerCase()===nombre.toLowerCase());
   if(duplicado){alert(`Ya existe la categoría "${duplicado.nombre}" en este convenio.`);input.value='';return;}
-  const{error}=await sb.from('categorias_convenio').insert({convenio_id:_convenioSeleccionadoPanelId,nombre});
+  const{error}=await sb.from('categorias_convenio').insert({convenio_id:_convenioSeleccionadoPanelId,nombre,sueldo_basico:basico});
   if(error){alert('No se pudo agregar: '+error.message);return;}
-  input.value='';
+  input.value='';inputBasico.value='';
   showToast('✅ Categoría agregada.');
   cargarListaCategoriasPanel();
 }
 
-async function editarCategoriaPanel(id,nombreActual){
+async function editarCategoriaPanel(id,nombreActual,basicoActual){
   if(!_convenioSeleccionadoPanelId)return;
   const nuevoNombre=prompt('Editar nombre de la categoría:',nombreActual);
   if(nuevoNombre===null)return;
-  const nombre=nuevoNombre.trim();
-  if(!nombre||nombre===nombreActual)return;
-  const{data:existentes}=await sb.from('categorias_convenio').select('id,nombre').eq('convenio_id',_convenioSeleccionadoPanelId).neq('id',id);
-  const duplicado=existentes?.find(c=>c.nombre.toLowerCase()===nombre.toLowerCase());
-  if(duplicado){alert(`Ya existe la categoría "${duplicado.nombre}" en este convenio.`);return;}
-  const{error}=await sb.from('categorias_convenio').update({nombre}).eq('id',id);
-  if(error){alert('No se pudo renombrar: '+error.message);return;}
-  showToast('✅ Categoría renombrada.');
+  const nombre=nuevoNombre.trim()||nombreActual;
+  const nuevoBasicoStr=prompt('Sueldo básico de este puesto (vacío = sin definir):',basicoActual??'');
+  if(nuevoBasicoStr===null)return;
+  const nuevoBasico=nuevoBasicoStr.trim()===''?null:parseFloat(nuevoBasicoStr);
+  if(nombre!==nombreActual){
+    const{data:existentes}=await sb.from('categorias_convenio').select('id,nombre').eq('convenio_id',_convenioSeleccionadoPanelId).neq('id',id);
+    const duplicado=existentes?.find(c=>c.nombre.toLowerCase()===nombre.toLowerCase());
+    if(duplicado){alert(`Ya existe la categoría "${duplicado.nombre}" en este convenio.`);return;}
+  }
+  const{error}=await sb.from('categorias_convenio').update({nombre,sueldo_basico:nuevoBasico}).eq('id',id);
+  if(error){alert('No se pudo actualizar: '+error.message);return;}
+  showToast('✅ Categoría actualizada.');
   cargarListaCategoriasPanel();
 }
 
@@ -2962,7 +2981,7 @@ async function cargarCategoriasParaConvenio(nombreConvenio,categoriaSeleccionada
     _categoriasCache=[];
     return;
   }
-  const{data}=await sb.from('categorias_convenio').select('id,nombre').eq('convenio_id',convenio.id).order('nombre');
+  const{data}=await sb.from('categorias_convenio').select('id,nombre,sueldo_basico').eq('convenio_id',convenio.id).order('nombre');
   _categoriasCache=data||[];
   let html='<option value="">— Sin especificar —</option>';
   _categoriasCache.forEach(c=>{
@@ -2979,7 +2998,34 @@ function onCambioCategoriaSelect(){
   const val=document.getElementById('legajo-categoria-select').value;
   const inputNuevo=document.getElementById('legajo-categoria-nueva-input');
   inputNuevo.style.display=val==='__nueva__'?'block':'none';
-  if(val==='__nueva__')inputNuevo.focus();
+  if(val==='__nueva__'){inputNuevo.focus();return;}
+
+  // Si el puesto elegido tiene un básico de convenio cargado, lo ofrecemos:
+  // autocompleta el campo Básico del legajo solo si está vacío (no pisa un
+  // básico ya cargado a mano, por ejemplo por un acuerdo individual).
+  const categoria=_categoriasCache.find(c=>c.nombre===val);
+  const inputBasico=document.getElementById('legajo-basico');
+  const hint=document.getElementById('legajo-basico-hint');
+  if(categoria?.sueldo_basico!=null){
+    if(hint)hint.textContent=`Básico de convenio para "${categoria.nombre}": ${mon(categoria.sueldo_basico)}`;
+    if(!inputBasico.value){
+      inputBasico.value=categoria.sueldo_basico;
+      inputBasico.style.background='#FFF8E1';
+      setTimeout(()=>{inputBasico.style.background='';},1500);
+    }
+  } else if(hint){
+    hint.textContent='';
+  }
+}
+
+function usarBasicoDeCategoria(){
+  const val=document.getElementById('legajo-categoria-select').value;
+  const categoria=_categoriasCache.find(c=>c.nombre===val);
+  if(!categoria||categoria.sueldo_basico==null){
+    alert('Este puesto todavía no tiene un básico cargado en Convenios. Cargalo ahí primero.');
+    return;
+  }
+  document.getElementById('legajo-basico').value=categoria.sueldo_basico;
 }
 
 async function confirmarNuevaCategoria(){
@@ -3017,7 +3063,7 @@ async function abrirLegajoEmpleado(empleadoId,nombre){
   if(!empId){alert('No se pudo determinar la empresa. Volvé a intentarlo.');return;}
   _legajoEmpleadoId=empleadoId;
   document.getElementById('legajo-empleado-title').textContent=`Legajo — ${nombre}`;
-  const campos=['numero','situacion','basico','os','banco','cbu','domicilio'];
+  const campos=['numero','situacion','basico','base-os','os','banco','cbu','domicilio'];
   campos.forEach(c=>{const el=document.getElementById('legajo-'+c);if(el)el.value=c==='situacion'?'activo':'';});
   document.getElementById('legajo-afiliado').checked=false;
 
@@ -3030,6 +3076,7 @@ async function abrirLegajoEmpleado(empleadoId,nombre){
     document.getElementById('legajo-numero').value=legajo.numero_legajo||'';
     document.getElementById('legajo-situacion').value=legajo.situacion_revista||'activo';
     document.getElementById('legajo-basico').value=legajo.sueldo_basico??'';
+    document.getElementById('legajo-base-os').value=legajo.base_obra_social??'';
     document.getElementById('legajo-os').value=legajo.obra_social||'';
     document.getElementById('legajo-banco').value=legajo.banco||'';
     document.getElementById('legajo-cbu').value=legajo.cbu||'';
@@ -3037,6 +3084,7 @@ async function abrirLegajoEmpleado(empleadoId,nombre){
     document.getElementById('legajo-afiliado').checked=!!legajo.afiliado_sindicato;
     renderConvenioSelect(legajo.convenio||'');
     await cargarCategoriasParaConvenio(legajo.convenio||'',legajo.categoria||'');
+    onCambioCategoriaSelect();
   }
   abrirModal('modal-legajo-empleado');
 }
@@ -3064,6 +3112,7 @@ async function guardarLegajo(){
       convenio:convenioVal&&convenioVal!=='__nuevo__'?convenioVal:null,
       categoria:categoriaVal&&categoriaVal!=='__nueva__'?categoriaVal:null,
       sueldo_basico:parseFloat(document.getElementById('legajo-basico').value)||null,
+      base_obra_social:parseFloat(document.getElementById('legajo-base-os').value)||null,
       obra_social:document.getElementById('legajo-os').value.trim()||null,
       banco:document.getElementById('legajo-banco').value.trim()||null,
       cbu:document.getElementById('legajo-cbu').value.trim()||null,
@@ -3155,6 +3204,7 @@ let _plantillaEmpleadoId=null;
 let _plantillaEmpleadoNombre='';
 let _plantillaMapPropio={};
 let _plantillaSueldoBasico=null; // sueldo básico del legajo del empleado, para autocompletar
+let _plantillaBaseObraSocial=null; // base especial para Obra Social cuando aporta por jornada completa
 
 function normalizarTexto(s){
   return(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
@@ -3187,7 +3237,7 @@ function filaPlantillaHTML(f){
       <input type="number" step="0.01" class="pl-valor" value="${f.valor??''}" style="width:100px;padding:6px;border:1.5px solid var(--border);border-radius:6px;">
       <button type="button" class="btn-sm btn-outline" title="Usar el sueldo básico cargado en el legajo" style="padding:4px 6px;" onclick="usarBasicoDeLegajo(this)">📋</button>
     </div></td>
-    <td style="padding:4px 6px;"><input type="text" class="pl-base" placeholder="rem. total" value="${f.base_codigo||''}" style="width:80px;padding:6px;border:1.5px solid var(--border);border-radius:6px;"></td>
+    <td style="padding:4px 6px;"><input type="text" class="pl-base" list="datalist-bases-especiales" placeholder="rem. total" value="${f.base_codigo||''}" style="width:80px;padding:6px;border:1.5px solid var(--border);border-radius:6px;"></td>
     <td style="padding:4px 6px;"><button class="btn-sm btn-outline" onclick="this.closest('tr').remove()">✕</button></td>
   </tr>`;
 }
@@ -3287,8 +3337,9 @@ async function abrirPlantillaEmpleado(empleadoId,nombre,periodoDefault){
   conceptosPropios?.forEach(c=>_plantillaMapPropio[c.codigo]=c);
   poblarDatalistConceptos();
 
-  const{data:legajo}=await sb.from('legajo_empleado').select('sueldo_basico').eq('empleado_id',empleadoId).maybeSingle();
+  const{data:legajo}=await sb.from('legajo_empleado').select('sueldo_basico,base_obra_social').eq('empleado_id',empleadoId).maybeSingle();
   _plantillaSueldoBasico=legajo?.sueldo_basico??null;
+  _plantillaBaseObraSocial=legajo?.base_obra_social??null;
 
   if(periodoDefault)await cargarFilasPlantilla();
   abrirModal('modal-plantilla-empleado');
@@ -3339,12 +3390,20 @@ function resolverConceptosPlantilla(filas){
 
   // Resolver primero los % con base_codigo explícito hacia otro concepto (puede
   // haber cadenas: 211 se basa en 416, y a su vez otro podría basarse en 211).
+  // "legajo_os" es una base especial: no es un concepto de la plantilla sino el
+  // valor cargado en el legajo para Obra Social cuando el empleado aporta por
+  // jornada completa aunque trabaje media jornada.
   let cambio=true,vueltas=0;
   while(cambio&&vueltas<10){
     cambio=false;vueltas++;
     pctFilas.forEach(f=>{
       if(resueltos[f.codigo]!=null)return;
-      if(f.base_codigo){
+      if(f.base_codigo==='legajo_os'){
+        if(_plantillaBaseObraSocial!=null){
+          resueltos[f.codigo]=Math.round(_plantillaBaseObraSocial*f.valor/100*100)/100;
+          cambio=true;
+        }
+      } else if(f.base_codigo){
         if(resueltos[f.base_codigo]!=null){
           resueltos[f.codigo]=Math.round(resueltos[f.base_codigo]*f.valor/100*100)/100;
           cambio=true;
@@ -3384,6 +3443,7 @@ function verVistaPreviaPlantilla(){
     const importe=resueltos[f.codigo];
     const nombre=nombreConcepto(f.codigo);
     const origenTexto=f.calculo!=='pct'?'Fijo'
+      :f.base_codigo==='legajo_os'?(_plantillaBaseObraSocial!=null?`${f.valor}% de ${mon(_plantillaBaseObraSocial)} (base OS jornada completa, legajo)`:'⚠️ base "legajo_os" — no hay valor cargado en el legajo')
       :f.base_codigo?(resueltos[f.base_codigo]!=null?`${f.valor}% de ${mon(resueltos[f.base_codigo])} (conc. ${f.base_codigo})`:`⚠️ ${f.valor}% de conc. ${f.base_codigo} — no está en la plantilla`)
       :`${f.valor}% de ${mon(bruto)} (bruto fijo)`;
     return `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px;border-bottom:0.5px solid var(--border);">
@@ -3399,7 +3459,7 @@ function verVistaPreviaPlantilla(){
     <div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Retenciones</span><strong>-${mon(retenciones)}</strong></div>
     <div style="display:flex;justify-content:space-between;padding:6px 0;border-top:1.5px solid var(--border);margin-top:4px;"><span><strong>Neto</strong></span><strong style="color:var(--navy2);">${mon(neto)}</strong></div>`;
   if(sinResolver.length){
-    html+=`<div style="margin-top:8px;font-size:12px;color:var(--danger);">⚠️ No se pudieron calcular los códigos ${sinResolver.join(', ')} porque el concepto base que referencian no está cargado en esta plantilla. Agregalo o corregí el código base.</div>`;
+    html+=`<div style="margin-top:8px;font-size:12px;color:var(--danger);">⚠️ No se pudieron calcular los códigos ${sinResolver.join(', ')} — o el concepto base no está en esta plantilla, o (si usan "legajo_os") falta cargar la Base Obra Social en el legajo del empleado.</div>`;
   }
   body.innerHTML=html;
   cont.style.display='block';
