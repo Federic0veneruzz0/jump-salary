@@ -756,14 +756,14 @@ tr:last-child td{border-bottom:none;}
       <div class="field" style="margin-bottom:0;">
         <label>Sueldo Básico vigente</label>
         <div style="display:flex;gap:6px;align-items:center;">
-          <input type="number" step="0.01" id="legajo-basico" style="flex:1;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+          <input type="text" inputmode="decimal" id="legajo-basico" style="flex:1;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;text-align:right;" onfocus="this.select()" onblur="onBlurMontoInput(this)" oninput="actualizarHintBasico()">
           <button type="button" class="btn-sm btn-outline" title="Usar el básico cargado para este puesto en Convenios" onclick="usarBasicoDeCategoria()">📋</button>
         </div>
         <div id="legajo-basico-hint" style="font-size:11px;color:var(--text3);margin-top:3px;"></div>
       </div>
       <div class="field" style="margin-bottom:0;">
         <label>Base Obra Social — jornada completa <span style="font-weight:400;color:var(--text3);font-size:11px;">(opcional)</span></label>
-        <input type="number" step="0.01" id="legajo-base-os" placeholder="dejar vacío si aporta sobre su básico real" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+        <input type="text" inputmode="decimal" id="legajo-base-os" placeholder="dejar vacío si aporta sobre su básico real" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;text-align:right;" onfocus="this.select()" onblur="onBlurMontoInput(this)">
         <div style="font-size:11px;color:var(--text3);margin-top:3px;">Completar solo si trabaja media jornada / part-time y por convenio tiene que aportar obra social como si fuera jornada completa. Se usa como base especial en la plantilla ("legajo_os").</div>
       </div>
       <div class="field" style="margin-bottom:0;">
@@ -3031,21 +3031,36 @@ function onCambioCategoriaSelect(){
   inputNuevo.style.display=val==='__nueva__'?'block':'none';
   if(val==='__nueva__'){inputNuevo.focus();return;}
 
-  // Si el puesto elegido tiene un básico de convenio cargado, lo ofrecemos:
-  // autocompleta el campo Básico del legajo solo si está vacío (no pisa un
-  // básico ya cargado a mano, por ejemplo por un acuerdo individual).
   const categoria=_categoriasCache.find(c=>c.nombre===val);
   const inputBasico=document.getElementById('legajo-basico');
+  if(categoria?.sueldo_basico!=null&&!inputBasico.value){
+    inputBasico.value=formatearNumeroAR(categoria.sueldo_basico);
+    inputBasico.style.background='#FFF8E1';
+    setTimeout(()=>{inputBasico.style.background='';},1500);
+  }
+  actualizarHintBasico();
+}
+
+// Muestra un aviso solo cuando hace falta: si el básico cargado coincide con
+// el de convenio para ese puesto, lo confirma; si difiere, avisa (puede ser
+// un acuerdo individual con ese empleado); si el puesto no tiene básico de
+// convenio cargado, no dice nada.
+function actualizarHintBasico(){
+  const val=document.getElementById('legajo-categoria-select')?.value;
+  const categoria=_categoriasCache.find(c=>c.nombre===val);
   const hint=document.getElementById('legajo-basico-hint');
-  if(categoria?.sueldo_basico!=null){
-    if(hint)hint.textContent=`Básico de convenio para "${categoria.nombre}": ${mon(categoria.sueldo_basico)}`;
-    if(!inputBasico.value){
-      inputBasico.value=categoria.sueldo_basico;
-      inputBasico.style.background='#FFF8E1';
-      setTimeout(()=>{inputBasico.style.background='';},1500);
-    }
-  } else if(hint){
-    hint.textContent='';
+  if(!hint)return;
+  if(categoria?.sueldo_basico==null){hint.textContent='';return;}
+  const actual=parsearNumeroAR(document.getElementById('legajo-basico').value);
+  if(actual==null){
+    hint.innerHTML=`Básico de convenio para "${categoria.nombre}": ${mon(categoria.sueldo_basico)}`;
+    hint.style.color='var(--text3)';
+  } else if(Math.abs(actual-categoria.sueldo_basico)<0.01){
+    hint.innerHTML=`✓ Coincide con el básico de convenio para "${categoria.nombre}"`;
+    hint.style.color='var(--text3)';
+  } else {
+    hint.innerHTML=`⚠️ Distinto al básico de convenio para "${categoria.nombre}" (${mon(categoria.sueldo_basico)}) — revisá si es un acuerdo particular con este empleado.`;
+    hint.style.color='var(--danger)';
   }
 }
 
@@ -3056,7 +3071,8 @@ function usarBasicoDeCategoria(){
     alert('Este puesto todavía no tiene un básico cargado en Convenios. Cargalo ahí primero.');
     return;
   }
-  document.getElementById('legajo-basico').value=categoria.sueldo_basico;
+  document.getElementById('legajo-basico').value=formatearNumeroAR(categoria.sueldo_basico);
+  actualizarHintBasico();
 }
 
 async function confirmarNuevaCategoria(){
@@ -3106,8 +3122,8 @@ async function abrirLegajoEmpleado(empleadoId,nombre){
   if(legajo){
     document.getElementById('legajo-numero').value=legajo.numero_legajo||'';
     document.getElementById('legajo-situacion').value=legajo.situacion_revista||'activo';
-    document.getElementById('legajo-basico').value=legajo.sueldo_basico??'';
-    document.getElementById('legajo-base-os').value=legajo.base_obra_social??'';
+    document.getElementById('legajo-basico').value=formatearNumeroAR(legajo.sueldo_basico);
+    document.getElementById('legajo-base-os').value=formatearNumeroAR(legajo.base_obra_social);
     document.getElementById('legajo-os').value=legajo.obra_social||'';
     document.getElementById('legajo-banco').value=legajo.banco||'';
     document.getElementById('legajo-cbu').value=legajo.cbu||'';
@@ -3142,8 +3158,8 @@ async function guardarLegajo(){
       situacion_revista:document.getElementById('legajo-situacion').value,
       convenio:convenioVal&&convenioVal!=='__nuevo__'?convenioVal:null,
       categoria:categoriaVal&&categoriaVal!=='__nueva__'?categoriaVal:null,
-      sueldo_basico:parseFloat(document.getElementById('legajo-basico').value)||null,
-      base_obra_social:parseFloat(document.getElementById('legajo-base-os').value)||null,
+      sueldo_basico:parsearNumeroAR(document.getElementById('legajo-basico').value),
+      base_obra_social:parsearNumeroAR(document.getElementById('legajo-base-os').value),
       obra_social:document.getElementById('legajo-os').value.trim()||null,
       banco:document.getElementById('legajo-banco').value.trim()||null,
       cbu:document.getElementById('legajo-cbu').value.trim()||null,
