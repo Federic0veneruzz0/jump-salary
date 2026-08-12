@@ -2854,8 +2854,12 @@ async function seleccionarConvenioEnPanel(id,nombre){
 
 async function cargarListaCategoriasPanel(){
   if(!_convenioSeleccionadoPanelId)return;
-  const{data}=await sb.from('categorias_convenio').select('id,nombre,sueldo_basico').eq('convenio_id',_convenioSeleccionadoPanelId).order('nombre');
+  const{data,error}=await sb.from('categorias_convenio').select('id,nombre,sueldo_basico').eq('convenio_id',_convenioSeleccionadoPanelId).order('nombre');
   const lista=document.getElementById('lista-categorias');
+  if(error){
+    lista.innerHTML=`<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Error al cargar categorías</div><div style="font-size:12px;color:var(--text3);margin-top:4px;">${error.message}${error.message.includes('sueldo_basico')?' — falta agregar la columna sueldo_basico (numeric, nullable) en categorias_convenio.':''}</div></div>`;
+    return;
+  }
   if(!data?.length){lista.innerHTML=`<div class="empty"><div class="empty-icon">🏷️</div><div class="empty-title">Sin categorías todavía</div></div>`;return;}
   lista.innerHTML=`<div class="card"><table><thead><tr><th>Categoría</th><th>Básico</th><th></th></tr></thead><tbody>${
     data.map(c=>`<tr><td>${c.nombre}</td><td>${c.sueldo_basico!=null?mon(c.sueldo_basico):'<span style="color:var(--text3);">—</span>'}</td><td style="text-align:right;white-space:nowrap;">
@@ -2981,7 +2985,13 @@ async function cargarCategoriasParaConvenio(nombreConvenio,categoriaSeleccionada
     _categoriasCache=[];
     return;
   }
-  const{data}=await sb.from('categorias_convenio').select('id,nombre,sueldo_basico').eq('convenio_id',convenio.id).order('nombre');
+  const{data,error}=await sb.from('categorias_convenio').select('id,nombre,sueldo_basico').eq('convenio_id',convenio.id).order('nombre');
+  if(error){
+    sel.innerHTML='<option value="">— Error cargando categorías, revisá la consola —</option>';
+    console.error('Error cargando categorías_convenio:',error);
+    _categoriasCache=[];
+    return;
+  }
   _categoriasCache=data||[];
   let html='<option value="">— Sin especificar —</option>';
   _categoriasCache.forEach(c=>{
