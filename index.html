@@ -2862,11 +2862,20 @@ async function cargarListaCategoriasPanel(){
   }
   if(!data?.length){lista.innerHTML=`<div class="empty"><div class="empty-icon">🏷️</div><div class="empty-title">Sin categorías todavía</div></div>`;return;}
   lista.innerHTML=`<div class="card"><table><thead><tr><th>Categoría</th><th>Básico</th><th></th></tr></thead><tbody>${
-    data.map(c=>`<tr><td>${c.nombre}</td><td>${c.sueldo_basico!=null?mon(c.sueldo_basico):'<span style="color:var(--text3);">—</span>'}</td><td style="text-align:right;white-space:nowrap;">
-      <button class="btn-sm btn-outline" onclick="editarCategoriaPanel('${c.id}','${c.nombre.replace(/'/g,"\\'")}',${c.sueldo_basico??'null'})">✏️</button>
+    data.map(c=>`<tr><td>${c.nombre}</td><td>
+      <input type="number" step="0.01" value="${c.sueldo_basico??''}" placeholder="—" style="width:130px;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;" onchange="actualizarBasicoCategoria('${c.id}',this.value)">
+    </td><td style="text-align:right;white-space:nowrap;">
+      <button class="btn-sm btn-outline" onclick="editarCategoriaPanel('${c.id}','${c.nombre.replace(/'/g,"\\'")}')">✏️</button>
       <button class="btn-sm btn-outline" onclick="eliminarCategoriaPanel('${c.id}','${c.nombre.replace(/'/g,"\\'")}')">🗑️</button>
     </td></tr>`).join('')
   }</tbody></table></div>`;
+}
+
+async function actualizarBasicoCategoria(id,valorStr){
+  const basico=valorStr.trim()===''?null:parseFloat(valorStr);
+  const{error}=await sb.from('categorias_convenio').update({sueldo_basico:basico}).eq('id',id);
+  if(error){alert('No se pudo guardar el básico: '+error.message);return;}
+  showToast('✅ Básico actualizado.');
 }
 
 async function agregarCategoriaDesdePanel(){
@@ -2886,22 +2895,18 @@ async function agregarCategoriaDesdePanel(){
   cargarListaCategoriasPanel();
 }
 
-async function editarCategoriaPanel(id,nombreActual,basicoActual){
+async function editarCategoriaPanel(id,nombreActual){
   if(!_convenioSeleccionadoPanelId)return;
   const nuevoNombre=prompt('Editar nombre de la categoría:',nombreActual);
   if(nuevoNombre===null)return;
-  const nombre=nuevoNombre.trim()||nombreActual;
-  const nuevoBasicoStr=prompt('Sueldo básico de este puesto (vacío = sin definir):',basicoActual??'');
-  if(nuevoBasicoStr===null)return;
-  const nuevoBasico=nuevoBasicoStr.trim()===''?null:parseFloat(nuevoBasicoStr);
-  if(nombre!==nombreActual){
-    const{data:existentes}=await sb.from('categorias_convenio').select('id,nombre').eq('convenio_id',_convenioSeleccionadoPanelId).neq('id',id);
-    const duplicado=existentes?.find(c=>c.nombre.toLowerCase()===nombre.toLowerCase());
-    if(duplicado){alert(`Ya existe la categoría "${duplicado.nombre}" en este convenio.`);return;}
-  }
-  const{error}=await sb.from('categorias_convenio').update({nombre,sueldo_basico:nuevoBasico}).eq('id',id);
-  if(error){alert('No se pudo actualizar: '+error.message);return;}
-  showToast('✅ Categoría actualizada.');
+  const nombre=nuevoNombre.trim();
+  if(!nombre||nombre===nombreActual)return;
+  const{data:existentes}=await sb.from('categorias_convenio').select('id,nombre').eq('convenio_id',_convenioSeleccionadoPanelId).neq('id',id);
+  const duplicado=existentes?.find(c=>c.nombre.toLowerCase()===nombre.toLowerCase());
+  if(duplicado){alert(`Ya existe la categoría "${duplicado.nombre}" en este convenio.`);return;}
+  const{error}=await sb.from('categorias_convenio').update({nombre}).eq('id',id);
+  if(error){alert('No se pudo renombrar: '+error.message);return;}
+  showToast('✅ Categoría renombrada.');
   cargarListaCategoriasPanel();
 }
 
