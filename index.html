@@ -728,67 +728,91 @@ tr:last-child td{border-bottom:none;}
       <button class="btn-sm btn-outline" onclick="cerrarModal('modal-legajo-empleado')">✕ Cerrar</button>
     </div>
     <div class="modal-sub" style="margin-bottom:14px;">Datos complementarios a los que trae ARCA — el importador nunca los pisa.</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-      <div class="field" style="margin-bottom:0;">
-        <label>Número de Legajo</label>
-        <input type="text" id="legajo-numero" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
-      </div>
-      <div class="field" style="margin-bottom:0;">
-        <label>Situación de revista</label>
-        <select id="legajo-situacion" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
-          <option value="activo">Activo</option>
-          <option value="licencia">Licencia</option>
-          <option value="suspendido">Suspendido</option>
-          <option value="vacaciones">Vacaciones</option>
-          <option value="baja">Baja</option>
-        </select>
-      </div>
-      <div class="field" style="margin-bottom:0;">
-        <label>Convenio colectivo</label>
-        <select id="legajo-convenio-select" onchange="onCambioConvenioSelect()" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;"></select>
-        <input type="text" id="legajo-convenio-nuevo-input" placeholder="Nombre del convenio nuevo — Enter para confirmar" style="display:none;margin-top:6px;width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" onblur="confirmarNuevoConvenio()" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
-      </div>
-      <div class="field" style="margin-bottom:0;">
-        <label>Categoría</label>
-        <select id="legajo-categoria-select" onchange="onCambioCategoriaSelect()" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;"></select>
-        <input type="text" id="legajo-categoria-nueva-input" placeholder="Nombre de la categoría nueva — Enter para confirmar" style="display:none;margin-top:6px;width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" onblur="confirmarNuevaCategoria()" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
-      </div>
-      <div class="field" style="margin-bottom:0;">
-        <label>Sueldo Básico vigente</label>
-        <div style="display:flex;gap:6px;align-items:center;">
-          <input type="text" inputmode="decimal" id="legajo-basico" style="flex:1;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;text-align:right;" onfocus="this.select()" onblur="onBlurMontoInput(this)" oninput="actualizarHintBasico()">
-          <button type="button" class="btn-sm btn-outline" title="Usar el básico cargado para este puesto en Convenios" onclick="usarBasicoDeCategoria()">📋</button>
+
+    <div style="margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:600;color:var(--navy2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">1. Convenio y puesto</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="field" style="margin-bottom:0;">
+          <label>Convenio colectivo</label>
+          <select id="legajo-convenio-select" onchange="onCambioConvenioSelect()" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;"></select>
+          <input type="text" id="legajo-convenio-nuevo-input" placeholder="Nombre del convenio nuevo — Enter para confirmar" style="display:none;margin-top:6px;width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" onblur="confirmarNuevoConvenio()" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
         </div>
-        <div id="legajo-basico-hint" style="font-size:11px;color:var(--text3);margin-top:3px;"></div>
-      </div>
-      <div class="field" style="margin-bottom:0;">
-        <label>Base Obra Social — jornada completa <span style="font-weight:400;color:var(--text3);font-size:11px;">(opcional)</span></label>
-        <input type="text" inputmode="decimal" id="legajo-base-os" placeholder="dejar vacío si aporta sobre su básico real" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;text-align:right;" onfocus="this.select()" onblur="onBlurMontoInput(this)">
-        <div style="font-size:11px;color:var(--text3);margin-top:3px;">Completar solo si trabaja media jornada / part-time y por convenio tiene que aportar obra social como si fuera jornada completa. Se usa como base especial en la plantilla ("legajo_os").</div>
-      </div>
-      <div class="field" style="margin-bottom:0;">
-        <label>Obra Social</label>
-        <input type="text" id="legajo-os" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
-      </div>
-      <div class="field" style="margin-bottom:0;">
-        <label>Banco</label>
-        <input type="text" id="legajo-banco" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
-      </div>
-      <div class="field" style="margin-bottom:0;">
-        <label>CBU</label>
-        <input type="text" id="legajo-cbu" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
-      </div>
-      <div class="field" style="margin-bottom:0;grid-column:1/-1;">
-        <label>Domicilio</label>
-        <input type="text" id="legajo-domicilio" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
-      </div>
-      <div class="field" style="margin-bottom:0;grid-column:1/-1;">
-        <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:normal;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
-          <input type="checkbox" id="legajo-afiliado" style="width:16px;height:16px;margin:0;">
-          Afiliado al sindicato (si no está tildado, se asume aporte solidario)
-        </label>
+        <div class="field" style="margin-bottom:0;">
+          <label>Categoría / puesto</label>
+          <select id="legajo-categoria-select" onchange="onCambioCategoriaSelect()" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;"></select>
+          <input type="text" id="legajo-categoria-nueva-input" placeholder="Nombre de la categoría nueva — Enter para confirmar" style="display:none;margin-top:6px;width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" onblur="confirmarNuevaCategoria()" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+        </div>
+        <div class="field" style="margin-bottom:0;grid-column:1/-1;">
+          <label>Sueldo Básico vigente</label>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input type="text" inputmode="decimal" id="legajo-basico" style="flex:1;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;text-align:right;" onfocus="this.select()" onblur="onBlurMontoInput(this)" oninput="actualizarHintBasico()">
+            <button type="button" class="btn-sm btn-outline" title="Usar el básico cargado para este puesto en Convenios" onclick="usarBasicoDeCategoria()">📋</button>
+          </div>
+          <div id="legajo-basico-hint" style="font-size:11px;color:var(--text3);margin-top:3px;"></div>
+        </div>
       </div>
     </div>
+
+    <div style="margin-bottom:16px;padding:12px;background:var(--surface-1,#f8f9fb);border-radius:var(--radius);">
+      <div style="font-size:12px;font-weight:600;color:var(--navy2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">2. Obra Social <span style="color:var(--danger);">*</span> — obligatorio</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="field" style="margin-bottom:0;">
+          <label>Obra Social</label>
+          <input type="text" id="legajo-os" placeholder="Ej: OSDE, OSPE, Swiss Medical..." style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" oninput="document.getElementById('legajo-os-hint').textContent=''">
+          <div id="legajo-os-hint" style="font-size:11px;color:var(--danger);margin-top:3px;"></div>
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Base jornada completa <span style="font-weight:400;color:var(--text3);font-size:11px;">(solo media jornada)</span></label>
+          <input type="text" inputmode="decimal" id="legajo-base-os" placeholder="dejar vacío si aporta sobre su básico real" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;text-align:right;" onfocus="this.select()" onblur="onBlurMontoInput(this)">
+          <div style="font-size:11px;color:var(--text3);margin-top:3px;">Completar SOLO si trabaja media jornada y por convenio aporta obra social como si fuera jornada completa.</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:600;color:var(--navy2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">3. Situación laboral</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="field" style="margin-bottom:0;">
+          <label>Situación de revista</label>
+          <select id="legajo-situacion" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+            <option value="activo">Activo</option>
+            <option value="licencia">Licencia</option>
+            <option value="suspendido">Suspendido</option>
+            <option value="vacaciones">Vacaciones</option>
+            <option value="baja">Baja</option>
+          </select>
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Número de Legajo <span style="font-weight:400;color:var(--text3);font-size:11px;">(opcional)</span></label>
+          <input type="text" id="legajo-numero" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+        </div>
+        <div class="field" style="margin-bottom:0;grid-column:1/-1;">
+          <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:normal;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+            <input type="checkbox" id="legajo-afiliado" style="width:16px;height:16px;margin:0;">
+            Afiliado al sindicato (si no está tildado, se asume aporte solidario)
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <details style="margin-bottom:8px;">
+      <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--navy2);text-transform:uppercase;letter-spacing:.04em;">4. Datos bancarios y domicilio (opcional)</summary>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;">
+        <div class="field" style="margin-bottom:0;">
+          <label>Banco</label>
+          <input type="text" id="legajo-banco" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>CBU</label>
+          <input type="text" id="legajo-cbu" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+        </div>
+        <div class="field" style="margin-bottom:0;grid-column:1/-1;">
+          <label>Domicilio</label>
+          <input type="text" id="legajo-domicilio" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+        </div>
+      </div>
+    </details>
+
     <div class="modal-actions" style="margin-top:18px;">
       <button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-legajo-empleado')">Cancelar</button>
       <button class="btn-sm btn-gold" id="btn-guardar-legajo" style="flex:1;" onclick="guardarLegajo()">💾 Guardar legajo</button>
@@ -3113,6 +3137,8 @@ async function abrirLegajoEmpleado(empleadoId,nombre){
   const campos=['numero','situacion','basico','base-os','os','banco','cbu','domicilio'];
   campos.forEach(c=>{const el=document.getElementById('legajo-'+c);if(el)el.value=c==='situacion'?'activo':'';});
   document.getElementById('legajo-afiliado').checked=false;
+  const hintOsInicial=document.getElementById('legajo-os-hint');
+  if(hintOsInicial)hintOsInicial.textContent='';
 
   await cargarConveniosCatalogo();
   renderConvenioSelect('');
@@ -3139,6 +3165,17 @@ async function abrirLegajoEmpleado(empleadoId,nombre){
 async function guardarLegajo(){
   const empId=empresaIdParaLegajo();
   if(!_legajoEmpleadoId||!empId)return;
+
+  const obraSocial=document.getElementById('legajo-os').value.trim();
+  const hintOs=document.getElementById('legajo-os-hint');
+  if(!obraSocial){
+    if(hintOs)hintOs.textContent='⚠️ La Obra Social es obligatoria — completala antes de guardar.';
+    document.getElementById('legajo-os').focus();
+    document.getElementById('legajo-os').scrollIntoView({behavior:'smooth',block:'center'});
+    return;
+  }
+  if(hintOs)hintOs.textContent='';
+
   const btn=document.getElementById('btn-guardar-legajo');
   const textoOriginal=btn?btn.textContent:'';
   if(btn){btn.disabled=true;btn.textContent='Guardando...';}
