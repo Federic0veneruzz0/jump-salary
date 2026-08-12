@@ -3161,8 +3161,9 @@ function normalizarTexto(s){
 }
 
 function esConceptoBasico(codigo){
+  if(String(codigo).trim()==='1')return true; // código estándar de "Sueldo Básico"
   const nombre=normalizarTexto(nombreConcepto(codigo));
-  return nombre.includes('basico');
+  return nombre.includes('basico')||nombre.includes('bruto');
 }
 
 function nombreConcepto(codigo){
@@ -3182,10 +3183,24 @@ function filaPlantillaHTML(f){
       <option value="fijo" ${f.calculo==='fijo'?'selected':''}>Fijo</option>
       <option value="pct" ${f.calculo==='pct'?'selected':''}>%</option>
     </select></td>
-    <td style="padding:4px 6px;"><input type="number" step="0.01" class="pl-valor" value="${f.valor??''}" style="width:110px;padding:6px;border:1.5px solid var(--border);border-radius:6px;"></td>
+    <td style="padding:4px 6px;"><div style="display:flex;gap:4px;align-items:center;">
+      <input type="number" step="0.01" class="pl-valor" value="${f.valor??''}" style="width:100px;padding:6px;border:1.5px solid var(--border);border-radius:6px;">
+      <button type="button" class="btn-sm btn-outline" title="Usar el sueldo básico cargado en el legajo" style="padding:4px 6px;" onclick="usarBasicoDeLegajo(this)">📋</button>
+    </div></td>
     <td style="padding:4px 6px;"><input type="text" class="pl-base" placeholder="rem. total" value="${f.base_codigo||''}" style="width:80px;padding:6px;border:1.5px solid var(--border);border-radius:6px;"></td>
     <td style="padding:4px 6px;"><button class="btn-sm btn-outline" onclick="this.closest('tr').remove()">✕</button></td>
   </tr>`;
+}
+
+// Botón manual: fuerza el valor de esa fila al básico del legajo, sin
+// depender de que el nombre del concepto coincida con ningún patrón.
+function usarBasicoDeLegajo(btn){
+  if(_plantillaSueldoBasico==null){
+    alert('Este empleado no tiene sueldo básico cargado en su legajo (Datos de Empleados). Cargalo ahí primero.');
+    return;
+  }
+  const tr=btn.closest('tr');
+  tr.querySelector('.pl-valor').value=_plantillaSueldoBasico;
 }
 
 // Si el usuario tipeó un nombre (no un código numérico) y ese nombre coincide
