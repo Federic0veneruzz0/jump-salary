@@ -773,7 +773,10 @@ tr:last-child td{border-bottom:none;}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div class="field" style="margin-bottom:0;">
           <label>Obra Social</label>
-          <input type="text" id="legajo-os" list="datalist-obras-sociales" placeholder="Ej: OSDE, OSPE, Swiss Medical..." style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" oninput="document.getElementById('legajo-os-hint').textContent=''">
+          <div style="display:flex;gap:6px;">
+            <input type="text" id="legajo-os" list="datalist-obras-sociales" placeholder="Ej: OSDE, OSPE, Swiss Medical..." style="flex:1;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" oninput="document.getElementById('legajo-os-hint').textContent=''">
+            <button type="button" class="btn-sm btn-outline" style="white-space:nowrap;" title="Agregar una obra social nueva al catálogo" onclick="agregarObraSocialDesdeLegajo()">+ Nueva</button>
+          </div>
           <div id="legajo-os-hint" style="font-size:11px;color:var(--danger);margin-top:3px;"></div>
         </div>
         <div class="field" style="margin-bottom:0;">
@@ -3373,19 +3376,38 @@ function empresaIdParaLegajo(){
 async function poblarDatalistObrasSociales(){
   const dl=document.getElementById('datalist-obras-sociales');
   if(!dl)return;
-  const vistos=new Set();
   const{data:catalogo,error:errCatalogo}=await sb.from('obras_sociales').select('nombre').order('nombre');
   if(errCatalogo){
     console.error('Error cargando catálogo de obras_sociales:',errCatalogo);
     const hintOs=document.getElementById('legajo-os-hint');
     if(hintOs)hintOs.innerHTML=`<span style="color:var(--danger);">⚠️ No se pudo cargar el catálogo de Obras Sociales: ${errCatalogo.message}</span>`;
+    return;
   }
-  catalogo?.forEach(o=>{const v=(o.nombre||'').trim();if(v)vistos.add(v);});
-  // Complementamos con lo ya tipeado en otros legajos, por si hay valores
-  // sueltos que todavía no se cargaron al catálogo.
-  const{data:usados}=await sb.from('legajo_empleado').select('obra_social').not('obra_social','is',null);
-  usados?.forEach(r=>{const v=(r.obra_social||'').trim();if(v)vistos.add(v);});
-  dl.innerHTML=[...vistos].sort().map(v=>`<option value="${v.replace(/"/g,'&quot;')}">`).join('');
+  const nombres=[...new Set((catalogo||[]).map(o=>(o.nombre||'').trim()).filter(Boolean))].sort();
+  dl.innerHTML=nombres.map(v=>`<option value="${v.replace(/"/g,'&quot;')}">`).join('');
+}
+
+// Permite cargar una Obra Social nueva al catálogo sin salir del legajo. Queda
+// disponible al instante en el datalist y también en el catálogo de Convenios.
+async function agregarObraSocialDesdeLegajo(){
+  const inputOs=document.getElementById('legajo-os');
+  const sugerido=inputOs.value.trim();
+  const nombre=(prompt('Nombre de la nueva Obra Social:',sugerido)||'').trim();
+  if(!nombre)return;
+  const codigo=(prompt('Código (opcional, dejar vacío si no aplica):','')||'').trim()||null;
+  const{data:existentes}=await sb.from('obras_sociales').select('id,nombre');
+  const duplicado=existentes?.find(o=>o.nombre.toLowerCase()===nombre.toLowerCase());
+  if(duplicado){
+    alert(`Ya existe "${duplicado.nombre}" en el catálogo — la elijo.`);
+    inputOs.value=duplicado.nombre;
+    return;
+  }
+  const{error}=await sb.from('obras_sociales').insert({nombre,codigo});
+  if(error){alert('No se pudo agregar: '+error.message);return;}
+  inputOs.value=nombre;
+  document.getElementById('legajo-os-hint').textContent='';
+  showToast('✅ Obra Social agregada al catálogo.');
+  poblarDatalistObrasSociales();
 }
 
 async function abrirLegajoEmpleado(empleadoId,nombre){
