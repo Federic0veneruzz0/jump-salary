@@ -2732,32 +2732,45 @@ async function generarPDFMultiple(){
     const pageHeight=pdf.internal.pageSize.getHeight();
     let primero=true;
     for(const reciboId of ids){
-      await verRecibo(reciboId);
-      const contenedor=document.getElementById('modal-recibo-body');
-      if(!contenedor)continue;
-      await new Promise(r=>setTimeout(r,300));
-      const canvas=await html2canvas(contenedor,{scale:2,backgroundColor:'#ffffff',useCORS:true});
-      const imgData=canvas.toDataURL('image/png');
-      const imgWidth=pageWidth-20;
-      const imgHeight=(canvas.height*imgWidth)/canvas.width;
-      if(!primero)pdf.addPage();
-      primero=false;
-      let heightLeft=imgHeight;
-      let position=10;
-      pdf.addImage(imgData,'PNG',10,position,imgWidth,Math.min(imgHeight,pageHeight-20));
-      heightLeft-=(pageHeight-20);
-      while(heightLeft>0){
-        position=heightLeft-imgHeight+10;
-        pdf.addPage();
-        pdf.addImage(imgData,'PNG',10,position,imgWidth,imgHeight);
-        heightLeft-=pageHeight;
+      let nombreEmpleado=reciboId;
+      try{
+        const{data:reciboInfo}=await sb.from('recibos').select('empleados(nombre)').eq('id',reciboId).single();
+        nombreEmpleado=reciboInfo?.empleados?.nombre||reciboId;
+
+        await verRecibo(reciboId);
+        const contenedor=document.getElementById('modal-recibo-body');
+        if(!contenedor)throw new Error('No se encontró el contenido del recibo en el modal.');
+        await new Promise(r=>setTimeout(r,500));
+        if(!contenedor.offsetWidth||!contenedor.offsetHeight)throw new Error('El recibo no se llegó a renderizar (ancho/alto en 0).');
+
+        const canvas=await html2canvas(contenedor,{scale:2,backgroundColor:'#ffffff',useCORS:true});
+        if(!canvas.width||!canvas.height)throw new Error('html2canvas generó un lienzo vacío (0x0).');
+
+        const imgData=canvas.toDataURL('image/png');
+        const imgWidth=pageWidth-20;
+        const imgHeight=(canvas.height*imgWidth)/canvas.width;
+        if(!primero)pdf.addPage();
+        primero=false;
+        let heightLeft=imgHeight;
+        let position=10;
+        pdf.addImage(imgData,'PNG',10,position,imgWidth,Math.min(imgHeight,pageHeight-20));
+        heightLeft-=(pageHeight-20);
+        while(heightLeft>0){
+          position=heightLeft-imgHeight+10;
+          pdf.addPage();
+          pdf.addImage(imgData,'PNG',10,position,imgWidth,imgHeight);
+          heightLeft-=pageHeight;
+        }
+      }catch(errItem){
+        console.error(`Error generando PDF para "${nombreEmpleado}" (recibo ${reciboId}):`,errItem);
+        throw new Error(`Falló en el recibo de "${nombreEmpleado}": ${errItem.message||errItem}`);
       }
     }
     cerrarModal('modal-ver-recibo');
     pdf.save(`recibos_${ids.length}_${Date.now()}.pdf`);
   }catch(err){
     console.error('Error generando PDF combinado:',err);
-    alert('No se pudo generar el PDF combinado. Probá de nuevo o descargá los recibos uno por uno.');
+    alert(`No se pudo generar el PDF combinado.\n\n${err.message||err}\n\nProbá de nuevo o descargá los recibos uno por uno.`);
   }finally{
     if(btn){btn.disabled=false;btn.textContent=textoOriginal;}
   }
