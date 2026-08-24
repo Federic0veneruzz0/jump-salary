@@ -939,8 +939,8 @@ function clasificarConceptoPorRango(codigo){
   const n=parseInt(codigo,10);
   if(isNaN(n))return null;
   if(n>=1&&n<=100)return 'rem';       // suman al sueldo bruto
-  if(n>=101&&n<=199)return 'ded';     // restan al sueldo bruto
-  if(n>=201&&n<=299)return 'ded';     // retenciones sobre el sueldo bruto
+  if(n>=101&&n<=199)return 'ded_rem'; // restan al sueldo bruto (faltas, presentismo, etc. — NO son retenciones legales)
+  if(n>=201&&n<=299)return 'ded';     // retenciones legales sobre el sueldo bruto (jubilación, obra social, sindicato, etc.)
   if(n>=401&&n<=499)return 'norem';   // no remunerativos
   return null;
 }
@@ -977,34 +977,34 @@ const CONCEPTOS_DEFAULT = {
   '82':{nombre:'Prest. Dineraria Ley 24577 (a cargo de la ART)',tipo:'rem'},
   '90':{nombre:'Rectificativa por remuneración Ley 27.742',tipo:'rem'},
   '91':{nombre:'Rectificativa por remuneracion Ley 27.802',tipo:'rem'},
-  '101':{nombre:'Dias Enfermedad',tipo:'ded'},'102':{nombre:'Dias Accidente',tipo:'ded'},
-  '103':{nombre:'Dias Faltas Injustificadas',tipo:'ded'},'104':{nombre:'Dias Feriados',tipo:'ded'},
-  '105':{nombre:'Otros Descuentos de Haberes sobre sueldo',tipo:'ded'},
-  '106':{nombre:'Otros Descuentos de Haberes sobre sueldo',tipo:'ded'},
-  '107':{nombre:'Otros Descuentos de Haberes sobre sueldo',tipo:'ded'},
-  '108':{nombre:'Otros Descuentos de Haberes sobre sueldo',tipo:'ded'},
-  '109':{nombre:'Otros Descuentos de Haberes sobre sueldo',tipo:'ded'},
-  '110':{nombre:'Otros Descuentos de Haberes sobre sueldo',tipo:'ded'},
-  '111':{nombre:'Otros Descuentos de haberes sobre adicionales',tipo:'ded'},
-  '112':{nombre:'Otros Descuentos de haberes sobre adicionales',tipo:'ded'},
-  '113':{nombre:'Otros Descuentos de haberes sobre adicionales',tipo:'ded'},
-  '114':{nombre:'Otros Descuentos de haberes sobre adicionales',tipo:'ded'},
-  '115':{nombre:'Otros Descuentos de haberes sobre adicionales',tipo:'ded'},
-  '116':{nombre:'Otros Descuentos de haberes sobre adicionales',tipo:'ded'},
-  '117':{nombre:'Otros Descuentos de haberes sobre adicionales',tipo:'ded'},
-  '118':{nombre:'Otros Descuentos de haberes sobre adicionales',tipo:'ded'},
-  '119':{nombre:'Otros Descuentos de haberes sobre adicionales',tipo:'ded'},
-  '120':{nombre:'Otros Descuentos de haberes sobre adicionales',tipo:'ded'},
-  '121':{nombre:'Otros Descuentos de haberes sobre premios',tipo:'ded'},
-  '122':{nombre:'Otros Descuentos de haberes sobre premios',tipo:'ded'},
-  '123':{nombre:'Otros Descuentos de haberes sobre premios',tipo:'ded'},
-  '124':{nombre:'Otros Descuentos de haberes sobre premios',tipo:'ded'},
-  '125':{nombre:'Otros Descuentos de haberes sobre premios',tipo:'ded'},
-  '126':{nombre:'Otros Descuentos de haberes sobre premios',tipo:'ded'},
-  '127':{nombre:'Otros Descuentos de haberes sobre premios',tipo:'ded'},
-  '128':{nombre:'Otros Descuentos de haberes sobre premios',tipo:'ded'},
-  '129':{nombre:'Otros Descuentos de haberes sobre premios',tipo:'ded'},
-  '130':{nombre:'Otros Descuentos de haberes sobre premios',tipo:'ded'},
+  '101':{nombre:'Dias Enfermedad',tipo:'ded_rem'},'102':{nombre:'Dias Accidente',tipo:'ded_rem'},
+  '103':{nombre:'Dias Faltas Injustificadas',tipo:'ded_rem'},'104':{nombre:'Dias Feriados',tipo:'ded_rem'},
+  '105':{nombre:'Otros Descuentos de Haberes sobre sueldo',tipo:'ded_rem'},
+  '106':{nombre:'Otros Descuentos de Haberes sobre sueldo',tipo:'ded_rem'},
+  '107':{nombre:'Otros Descuentos de Haberes sobre sueldo',tipo:'ded_rem'},
+  '108':{nombre:'Otros Descuentos de Haberes sobre sueldo',tipo:'ded_rem'},
+  '109':{nombre:'Otros Descuentos de Haberes sobre sueldo',tipo:'ded_rem'},
+  '110':{nombre:'Otros Descuentos de Haberes sobre sueldo',tipo:'ded_rem'},
+  '111':{nombre:'Otros Descuentos de haberes sobre adicionales',tipo:'ded_rem'},
+  '112':{nombre:'Otros Descuentos de haberes sobre adicionales',tipo:'ded_rem'},
+  '113':{nombre:'Otros Descuentos de haberes sobre adicionales',tipo:'ded_rem'},
+  '114':{nombre:'Otros Descuentos de haberes sobre adicionales',tipo:'ded_rem'},
+  '115':{nombre:'Otros Descuentos de haberes sobre adicionales',tipo:'ded_rem'},
+  '116':{nombre:'Otros Descuentos de haberes sobre adicionales',tipo:'ded_rem'},
+  '117':{nombre:'Otros Descuentos de haberes sobre adicionales',tipo:'ded_rem'},
+  '118':{nombre:'Otros Descuentos de haberes sobre adicionales',tipo:'ded_rem'},
+  '119':{nombre:'Otros Descuentos de haberes sobre adicionales',tipo:'ded_rem'},
+  '120':{nombre:'Otros Descuentos de haberes sobre adicionales',tipo:'ded_rem'},
+  '121':{nombre:'Otros Descuentos de haberes sobre premios',tipo:'ded_rem'},
+  '122':{nombre:'Otros Descuentos de haberes sobre premios',tipo:'ded_rem'},
+  '123':{nombre:'Otros Descuentos de haberes sobre premios',tipo:'ded_rem'},
+  '124':{nombre:'Otros Descuentos de haberes sobre premios',tipo:'ded_rem'},
+  '125':{nombre:'Otros Descuentos de haberes sobre premios',tipo:'ded_rem'},
+  '126':{nombre:'Otros Descuentos de haberes sobre premios',tipo:'ded_rem'},
+  '127':{nombre:'Otros Descuentos de haberes sobre premios',tipo:'ded_rem'},
+  '128':{nombre:'Otros Descuentos de haberes sobre premios',tipo:'ded_rem'},
+  '129':{nombre:'Otros Descuentos de haberes sobre premios',tipo:'ded_rem'},
+  '130':{nombre:'Otros Descuentos de haberes sobre premios',tipo:'ded_rem'},
   '201':{nombre:'Jubilacion',tipo:'ded'},
   '202':{nombre:'Ley 19032',tipo:'ded'},'203':{nombre:'Obra Social',tipo:'ded'},
   '204':{nombre:'Obra Social Adherente',tipo:'ded'},'205':{nombre:'Anssal',tipo:'ded'},
@@ -2242,6 +2242,17 @@ function extraerConceptos(datos,mapPropio){
   return conceptos;
 }
 
+// Totaliza los conceptos ya extraídos, netos: Remunerativo neto ya descuenta los
+// conceptos 101-199 (ded_rem: faltas, presentismo, etc.) que reducen el bruto pero
+// NO son retenciones legales sobre el trabajador (esas son tipo 'ded', 201-299).
+function calcularTotalesConceptos(conceptos){
+  const suma=(t)=>(conceptos||[]).filter(c=>c.tipo===t).reduce((s,c)=>s+c.importe,0);
+  const rem=suma('rem')-suma('ded_rem');
+  const norem=suma('norem');
+  const dedLegal=suma('ded');
+  return{rem,norem,dedLegal,bruto:rem+norem};
+}
+
 // Suma los conceptos deducidos al empleado relacionados con Obra Social
 // (código 203 Obra Social, 204 Obra Social Adherente, 221/222 Aporte Adicional OS, etc.)
 function calcularAporteOS(conceptos){
@@ -2262,7 +2273,9 @@ async function verRecibo(reciboId){
   const cfg=contrib_cfg||{};
   const{data:contribExtra}=await sb.from('contribuciones_extra').select('*').eq('empresa_id',r.empresa_id);
 
-  const remBase=conceptos.filter(c=>c.tipo==='rem').reduce((s,c)=>s+c.importe,0);
+  const remBase=conceptos.filter(c=>c.tipo==='rem').reduce((s,c)=>s+c.importe,0)
+              -conceptos.filter(c=>c.tipo==='ded_rem').reduce((s,c)=>s+c.importe,0);
+  const totales=calcularTotalesConceptos(conceptos);
 
   // Modo de Contratación 099 (ARCA): directores/socios gerentes sin aportes a
   // seguridad social ni obra social. Solo corresponden LRT, FFEP y Seguro de Vida Colectivo.
@@ -2289,7 +2302,7 @@ async function verRecibo(reciboId){
     monto:c.tipo==='pct'?Math.round(remBase*c.pct/100):c.monto
   }));
   const totalContrib=contrib.reduce((s,c)=>s+c.monto,0);
-  const costoTotal=r.total_haberes+r.total_no_rem+totalContrib;
+  const costoTotal=totales.bruto+totalContrib;
   const emp=r.empleados||{};
   const empresa=r.empresas||{};
 
@@ -2311,7 +2324,7 @@ async function verRecibo(reciboId){
       <span><span style="color:var(--text3);font-size:11px;margin-right:3px;">${c.cod}.</span>${c.nombre}</span>
       <span style="text-align:right;color:var(--text3);">${etiquetaCalculo}</span>
       <span style="text-align:right;color:var(--text3);font-size:11px;">${baseTexto}</span>
-      <span style="text-align:right;color:${c.tipo==='ded'?'var(--danger)':c.tipo==='norem'?'#854F0B':c.tipo==='desconocido'?'#C2410C':'var(--text)'};${c.tipo==='desconocido'?'font-weight:600;':''}">${mon(c.importe)}${c.tipo==='desconocido'?' ⚠️':''}</span>
+      <span style="text-align:right;color:${c.tipo==='ded'||c.tipo==='ded_rem'?'var(--danger)':c.tipo==='norem'?'#854F0B':c.tipo==='desconocido'?'#C2410C':'var(--text)'};${c.tipo==='desconocido'?'font-weight:600;':''}">${mon(c.importe)}${c.tipo==='desconocido'?' ⚠️':''}</span>
     </div>`;
   }).join('');
 
@@ -2375,16 +2388,16 @@ async function verRecibo(reciboId){
       <!-- SUELDO BRUTO -->
       <div style="display:flex;justify-content:space-between;align-items:center;background:var(--navy2);color:#fff;padding:7px 12px;">
         <span style="font-size:12px;font-weight:600;letter-spacing:.03em;">SUELDO BRUTO</span>
-        <span style="font-size:13px;font-weight:600;">${mon(r.total_haberes+r.total_no_rem)}</span>
+        <span style="font-size:13px;font-weight:600;">${mon(totales.bruto)}</span>
       </div>
       <div style="display:grid;grid-template-columns:1fr 100px 150px 110px;padding:4px 12px;font-size:11px;color:var(--text3);border-bottom:0.5px solid var(--border-strong);">
         <span>Concepto</span><span style="text-align:right;">Cálculo</span><span style="text-align:right;">Base</span><span style="text-align:right;">Monto</span>
       </div>
       ${rowsConc}
       <div style="display:flex;justify-content:space-between;padding:6px 12px;background:var(--surface-1,#f8f9fb);border-top:1px solid var(--border);font-size:11px;color:var(--text2);">
-        <span><b>Remunerativo: ${mon(r.total_haberes)}</b></span>
-        <span><b>No Remunerativo: ${mon(r.total_no_rem)}</b></span>
-        <span><b>Descuentos: ${mon(r.total_descuentos)}</b></span>
+        <span><b>Remunerativo: ${mon(totales.rem)}</b></span>
+        <span><b>No Remunerativo: ${mon(totales.norem)}</b></span>
+        <span><b>Descuentos: ${mon(totales.dedLegal)}</b></span>
       </div>
 
       <!-- NETO -->
@@ -2399,8 +2412,8 @@ async function verRecibo(reciboId){
           <div style="font-size:11px;font-weight:600;color:#fff;background:var(--navy2);padding:3px 10px;border-radius:4px;margin-bottom:8px;display:inline-block;">COMPOSICIÓN SALARIAL</div>
           <div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:0.5px solid var(--border);color:var(--text2);"><span><b>Costo total empleador:</b></span><span><b>${mon(costoTotal)}</b></span></div>
           <div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:0.5px solid var(--border);color:var(--text2);"><span>Contribuciones patronales</span><span>${mon(totalContrib)}</span></div>
-          <div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:0.5px solid var(--border);color:var(--text2);"><span>Sueldo bruto</span><span>${mon(r.total_haberes+r.total_no_rem)}</span></div>
-          <div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:0.5px solid var(--border);color:var(--text2);"><span>Descuentos trabajador</span><span>${mon(r.total_descuentos)}</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:0.5px solid var(--border);color:var(--text2);"><span>Sueldo bruto</span><span>${mon(totales.bruto)}</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:0.5px solid var(--border);color:var(--text2);"><span>Descuentos trabajador</span><span>${mon(totales.dedLegal)}</span></div>
           <div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 0;color:var(--navy2);font-weight:600;"><span>Neto a cobrar</span><span>${mon(r.neto_redondeado||r.neto)}</span></div>
           <div style="font-size:10px;color:var(--text3);margin-top:6px;font-style:italic;">Contrib. patronales estimadas — Art. 140 Dto. 407/2026</div>
         </div>
@@ -2422,8 +2435,8 @@ async function verRecibo(reciboId){
     const datos=[
       {label:'Sueldo Neto',      val:netoVal,        color:'#0f1f3d'},
       {label:'Contribuciones',   val:totalContrib,   color:'#3b6fd4'},
-      {label:'Descuentos trab.', val:r.total_descuentos, color:'#e8b84b'},
-      {label:'No Remunerativo',  val:r.total_no_rem, color:'#5b8de8'},
+      {label:'Descuentos trab.', val:totales.dedLegal, color:'#e8b84b'},
+      {label:'No Remunerativo',  val:totales.norem, color:'#5b8de8'},
     ].filter(d=>d.val>0);
     const total=datos.reduce((s,d)=>s+d.val,0);
     datos.forEach(d=>d.pct=Math.round(d.val*1000/total)/10);
@@ -3463,7 +3476,7 @@ function clasificacionConcepto(codigo){
 }
 
 function ordenTipoConcepto(tipo){
-  return tipo==='rem'?0:tipo==='ded'?1:tipo==='norem'?2:3;
+  return tipo==='rem'?0:tipo==='ded_rem'?1:tipo==='ded'?2:tipo==='norem'?3:4;
 }
 
 function ordenarFilasPorTipo(filas){
@@ -3710,14 +3723,15 @@ async function generarListadoEmpleados(){
     const filas=recibos.map(r=>{
       const mapPropio=mapPropioPorEmpresa[r.empresa_id]||{};
       const conceptos=extraerConceptos(r.datos_json,mapPropio);
+      const totalesFila=calcularTotalesConceptos(conceptos);
       return{
         nombre:r.empleados?.nombre||'—',
         cuil:fc(r.empleados?.cuil||''),
         cuilRaw:nc(r.empleados?.cuil||''),
         fechaIngreso:r.empleados?.fecha_ingreso||null,
         empresa:r.empresas?.nombre||'',
-        bruto:(r.total_haberes||0)+(r.total_no_rem||0),
-        norem:r.total_no_rem||0,
+        bruto:totalesFila.bruto,
+        norem:totalesFila.norem,
         os:calcularAporteOS(conceptos),
         neto:r.neto_redondeado||r.neto||0,
       };
