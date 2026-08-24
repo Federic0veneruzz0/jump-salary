@@ -2323,13 +2323,15 @@ async function calcularDatosRecibo(reciboId){
   const emp=r.empleados||{};
   const empresa=r.empresas||{};
 
-  return{r,conceptos,remBase,totales,contrib,totalContrib,costoTotal,emp,empresa};
+  const{data:constancia}=await sb.from('constancias').select('fecha_firma').eq('recibo_id',reciboId).order('fecha_firma',{ascending:false}).limit(1).maybeSingle();
+
+  return{r,conceptos,remBase,totales,contrib,totalContrib,costoTotal,emp,empresa,fechaFirma:constancia?.fecha_firma||null};
 }
 
 async function verRecibo(reciboId){
   const datosRecibo=await calcularDatosRecibo(reciboId);
   if(!datosRecibo)return;
-  const{r,conceptos,remBase,totales,contrib,totalContrib,costoTotal,emp,empresa}=datosRecibo;
+  const{r,conceptos,remBase,totales,contrib,totalContrib,costoTotal,emp,empresa,fechaFirma}=datosRecibo;
 
   const rowsContrib=contrib.filter(c=>c.monto>0).map(c=>`
     <div style="display:grid;grid-template-columns:1fr 60px 110px 110px;padding:5px 12px;font-size:12px;border-bottom:0.5px solid var(--border);">
@@ -2429,6 +2431,17 @@ async function verRecibo(reciboId){
       <div style="display:flex;justify-content:space-between;align-items:center;background:var(--navy2);color:#fff;padding:12px 16px;">
         <span style="font-size:14px;font-weight:600;letter-spacing:.03em;">SUELDO NETO A COBRAR</span>
         <span style="font-size:20px;font-weight:700;">${mon(r.neto_redondeado||r.neto)}</span>
+      </div>
+
+      <!-- CONSTANCIA DE RECEPCIÓN -->
+      <div style="padding:10px 16px;border-top:1px solid var(--border);">
+        ${fechaFirma?(()=>{
+          const f=new Date(fechaFirma);
+          const fechaFmt=f.toLocaleDateString('es-AR')+' '+f.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+          return `<div style="font-size:11px;font-weight:600;color:#1a783c;">✓ CONSTANCIA DE RECEPCIÓN</div>
+                  <div style="font-size:11px;color:var(--text2);margin-top:2px;">Recibí conforme — firmado digitalmente por el trabajador el ${fechaFmt} hs.</div>`;
+        })():`<div style="font-size:11px;font-weight:600;color:#c2410c;">⚠ PENDIENTE DE FIRMA</div>
+              <div style="font-size:11px;color:var(--text2);margin-top:2px;">Este recibo todavía no fue confirmado/firmado por el trabajador.</div>`}
       </div>
 
       <!-- PANEL INFERIOR: composicion + grafico -->
@@ -2762,7 +2775,7 @@ function _drawBarraTitulo(pdf,titulo,valor,x,y,width){
 }
 
 function dibujarReciboPDF(pdf,datosRecibo){
-  const{r,conceptos,remBase,totales,contrib,totalContrib,costoTotal,emp,empresa}=datosRecibo;
+  const{r,conceptos,remBase,totales,contrib,totalContrib,costoTotal,emp,empresa,fechaFirma}=datosRecibo;
   const pageWidth=pdf.internal.pageSize.getWidth();
   const marginX=10;
   const usableWidth=pageWidth-marginX*2;
@@ -2870,6 +2883,27 @@ function dibujarReciboPDF(pdf,datosRecibo){
   pdf.text('SUELDO NETO A COBRAR',marginX+3,y+6.5);
   pdf.setFontSize(13);
   pdf.text(mon(r.neto_redondeado||r.neto),pageWidth-marginX-3,y+6.8,{align:'right'});
+  y+=15;
+
+  // Constancia de recepción — es lo que le da validez legal al documento
+  // impreso (Art. 138/140 LCT: constancia de recepción firmada por el trabajador).
+  pdf.setDrawColor(208,216,236);pdf.setLineWidth(0.2);
+  pdf.line(marginX,y,pageWidth-marginX,y);
+  y+=5;
+  pdf.setFont('helvetica','bold');pdf.setFontSize(8);
+  if(fechaFirma){
+    const f=new Date(fechaFirma);
+    const fechaFmt=f.toLocaleDateString('es-AR')+' '+f.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+    pdf.setTextColor(30,120,60);
+    pdf.text('✓ CONSTANCIA DE RECEPCIÓN',marginX,y);
+    pdf.setFont('helvetica','normal');pdf.setFontSize(7.5);pdf.setTextColor(60,68,85);
+    pdf.text(`Recibí conforme — firmado digitalmente por el trabajador el ${fechaFmt} hs.`,marginX,y+4.5);
+  } else {
+    pdf.setTextColor(194,65,12);
+    pdf.text('⚠ PENDIENTE DE FIRMA',marginX,y);
+    pdf.setFont('helvetica','normal');pdf.setFontSize(7.5);pdf.setTextColor(60,68,85);
+    pdf.text('Este recibo todavía no fue confirmado/firmado por el trabajador.',marginX,y+4.5);
+  }
 }
 
 async function generarPDFMultiple(){
