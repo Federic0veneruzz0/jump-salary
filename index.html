@@ -3374,7 +3374,12 @@ async function poblarDatalistObrasSociales(){
   const dl=document.getElementById('datalist-obras-sociales');
   if(!dl)return;
   const vistos=new Set();
-  const{data:catalogo}=await sb.from('obras_sociales').select('nombre').order('nombre');
+  const{data:catalogo,error:errCatalogo}=await sb.from('obras_sociales').select('nombre').order('nombre');
+  if(errCatalogo){
+    console.error('Error cargando catálogo de obras_sociales:',errCatalogo);
+    const hintOs=document.getElementById('legajo-os-hint');
+    if(hintOs)hintOs.innerHTML=`<span style="color:var(--danger);">⚠️ No se pudo cargar el catálogo de Obras Sociales: ${errCatalogo.message}</span>`;
+  }
   catalogo?.forEach(o=>{const v=(o.nombre||'').trim();if(v)vistos.add(v);});
   // Complementamos con lo ya tipeado en otros legajos, por si hay valores
   // sueltos que todavía no se cargaron al catálogo.
