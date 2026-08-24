@@ -743,12 +743,12 @@ tr:last-child td{border-bottom:none;}
           <input type="text" id="legajo-categoria-nueva-input" placeholder="Nombre de la categoría nueva — Enter para confirmar" style="display:none;margin-top:6px;width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" onblur="confirmarNuevaCategoria()" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
         </div>
         <div class="field" style="margin-bottom:0;grid-column:1/-1;">
-          <label>Sueldo Básico vigente</label>
-          <div style="display:flex;gap:6px;align-items:center;">
+          <label style="display:inline;margin-right:10px;">Sueldo Básico vigente</label>
+          <span id="legajo-basico-hint" style="font-size:11px;color:var(--text3);"></span>
+          <div style="display:flex;gap:6px;align-items:center;margin-top:6px;max-width:280px;">
             <input type="text" inputmode="decimal" id="legajo-basico" style="flex:1;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;text-align:right;" onfocus="this.select()" onblur="onBlurMontoInput(this)" oninput="actualizarHintBasico()">
             <button type="button" class="btn-sm btn-outline" title="Usar el básico cargado para este puesto en Convenios" onclick="usarBasicoDeCategoria()">📋</button>
           </div>
-          <div id="legajo-basico-hint" style="font-size:11px;color:var(--text3);margin-top:3px;"></div>
         </div>
       </div>
     </div>
@@ -758,7 +758,7 @@ tr:last-child td{border-bottom:none;}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div class="field" style="margin-bottom:0;">
           <label>Obra Social</label>
-          <input type="text" id="legajo-os" placeholder="Ej: OSDE, OSPE, Swiss Medical..." style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" oninput="document.getElementById('legajo-os-hint').textContent=''">
+          <input type="text" id="legajo-os" list="datalist-obras-sociales" placeholder="Ej: OSDE, OSPE, Swiss Medical..." style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" oninput="document.getElementById('legajo-os-hint').textContent=''">
           <div id="legajo-os-hint" style="font-size:11px;color:var(--danger);margin-top:3px;"></div>
         </div>
         <div class="field" style="margin-bottom:0;">
@@ -812,6 +812,7 @@ tr:last-child td{border-bottom:none;}
         </div>
       </div>
     </details>
+    <datalist id="datalist-obras-sociales"></datalist>
 
     <div class="modal-actions" style="margin-top:18px;">
       <button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-legajo-empleado')">Cancelar</button>
@@ -3129,6 +3130,18 @@ function empresaIdParaLegajo(){
   return empresaActivaId||currentUser?.empresa_id||null;
 }
 
+async function poblarDatalistObrasSociales(){
+  const dl=document.getElementById('datalist-obras-sociales');
+  if(!dl)return;
+  const{data}=await sb.from('legajo_empleado').select('obra_social').not('obra_social','is',null);
+  const vistos=new Set();
+  data?.forEach(r=>{
+    const v=(r.obra_social||'').trim();
+    if(v)vistos.add(v);
+  });
+  dl.innerHTML=[...vistos].sort().map(v=>`<option value="${v.replace(/"/g,'&quot;')}">`).join('');
+}
+
 async function abrirLegajoEmpleado(empleadoId,nombre){
   const empId=empresaIdParaLegajo();
   if(!empId){alert('No se pudo determinar la empresa. Volvé a intentarlo.');return;}
@@ -3139,6 +3152,7 @@ async function abrirLegajoEmpleado(empleadoId,nombre){
   document.getElementById('legajo-afiliado').checked=false;
   const hintOsInicial=document.getElementById('legajo-os-hint');
   if(hintOsInicial)hintOsInicial.textContent='';
+  poblarDatalistObrasSociales();
 
   await cargarConveniosCatalogo();
   renderConvenioSelect('');
