@@ -8,6 +8,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <style>
 :root {
   --navy: #0f1f3d;
@@ -408,6 +409,9 @@ tr:last-child td{border-bottom:none;}
               </select>
               <select id="filtro-periodo-rec" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" onchange="cargarRecibosContador()">
                 <option value="">Todos los períodos</option>
+              </select>
+              <select id="filtro-tipo-rec" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" onchange="cargarRecibosContador()">
+                <option value="">Todos los tipos</option>
               </select>
               <button class="btn-sm btn-outline" onclick="abrirModalListado(false)">📋 Generar listado</button>
             </div>
@@ -1809,6 +1813,8 @@ async function cargarRecibosContador(){
   const estado=document.getElementById('filtro-estado-rec')?.value;
   const selPeriodo=document.getElementById('filtro-periodo-rec');
   const periodoSeleccionado=selPeriodo?.value||'';
+  const selTipo=document.getElementById('filtro-tipo-rec');
+  const tipoSeleccionado=selTipo?.value||'';
   // Filtrar solo por empresas del estudio del contador
   const{data:empresasEstudio}=await sb.from('empresas').select('id').eq('estudio_id',currentUser.estudio_id).eq('activa',true);
   const idsEstudio=empresasEstudio?.map(e=>e.id)||[];
@@ -1822,11 +1828,21 @@ async function cargarRecibosContador(){
     selPeriodo.innerHTML='<option value="">Todos los períodos</option>'+periodosDisponibles.map(p=>`<option value="${p}">${parseMes(p)}</option>`).join('');
     if(periodosDisponibles.includes(periodoSeleccionado)) selPeriodo.value=periodoSeleccionado;
   }
+  let qTipos=sb.from('recibos').select('tipo');
+  if(empresaActivaId) qTipos=qTipos.eq('empresa_id',empresaActivaId);
+  else qTipos=qTipos.in('empresa_id',idsEstudio);
+  const{data:tiposData}=await qTipos;
+  const tiposDisponibles=[...new Set((tiposData||[]).map(p=>p.tipo).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  if(selTipo){
+    selTipo.innerHTML='<option value="">Todos los tipos</option>'+tiposDisponibles.map(t=>`<option value="${t}">${t}</option>`).join('');
+    if(tiposDisponibles.includes(tipoSeleccionado)) selTipo.value=tipoSeleccionado;
+  }
   let q=sb.from('recibos').select('*,empleados(nombre,cuil),empresas(nombre)').limit(3000);
   if(empresaActivaId) q=q.eq('empresa_id',empresaActivaId);
   else q=q.in('empresa_id',idsEstudio);
   if(estado)q=q.eq('estado',estado);
   if(periodoSeleccionado&&periodosDisponibles.includes(periodoSeleccionado))q=q.eq('periodo',periodoSeleccionado);
+  if(tipoSeleccionado&&tiposDisponibles.includes(tipoSeleccionado))q=q.eq('tipo',tipoSeleccionado);
   const{data:recibosRaw}=await q;
   const recibos=(recibosRaw||[]).slice().sort((a,b)=>{
     const empA=a.empresas?.nombre||'';
@@ -2259,16 +2275,19 @@ function calcularAporteOS(conceptos){
   return (conceptos||[]).filter(c=>c.tipo==='ded'&&/obra social|\bos\b/i.test(c.nombre||'')).reduce((s,c)=>s+c.importe,0);
 }
 
-async function verRecibo(reciboId){
+// Calcula todos los datos de un recibo (conceptos, contribuciones, totales) una
+// sola vez. Fuente única de verdad reutilizada por verRecibo() (vista HTML) y por
+// el generador nativo de PDF (dibujarReciboPDF), para que ambos muestren siempre
+// exactamente los mismos números.
+async function calcularDatosRecibo(reciboId){
   const{data:r}=await sb.from('recibos').select('*,empleados(*),empresas(*)').eq('id',reciboId).single();
-  if(!r)return;
+  if(!r)return null;
   const{data:conceptosPropios}=await sb.from('conceptos_empresa').select('codigo,nombre,tipo,calculo,porcentaje,base_codigo').eq('empresa_id',r.empresa_id);
   const mapPropio={};
   conceptosPropios?.forEach(c=>mapPropio[c.codigo]=c);
   const datos=r.datos_json||{};
   const conceptos=extraerConceptos(datos,mapPropio);
 
-  // Cargar contribuciones reales de la empresa
   const{data:contrib_cfg}=await sb.from('contribuciones_empresa').select('*').eq('empresa_id',r.empresa_id).single();
   const cfg=contrib_cfg||{};
   const{data:contribExtra}=await sb.from('contribuciones_extra').select('*').eq('empresa_id',r.empresa_id);
@@ -2277,8 +2296,6 @@ async function verRecibo(reciboId){
               -conceptos.filter(c=>c.tipo==='ded_rem').reduce((s,c)=>s+c.importe,0);
   const totales=calcularTotalesConceptos(conceptos);
 
-  // Modo de Contratación 099 (ARCA): directores/socios gerentes sin aportes a
-  // seguridad social ni obra social. Solo corresponden LRT, FFEP y Seguro de Vida Colectivo.
   const modoContrato=String(datos['Modo Contrato']||'').trim().replace(/^0+/,'');
   const esModo99=modoContrato==='99';
 
@@ -2305,6 +2322,14 @@ async function verRecibo(reciboId){
   const costoTotal=totales.bruto+totalContrib;
   const emp=r.empleados||{};
   const empresa=r.empresas||{};
+
+  return{r,conceptos,remBase,totales,contrib,totalContrib,costoTotal,emp,empresa};
+}
+
+async function verRecibo(reciboId){
+  const datosRecibo=await calcularDatosRecibo(reciboId);
+  if(!datosRecibo)return;
+  const{r,conceptos,remBase,totales,contrib,totalContrib,costoTotal,emp,empresa}=datosRecibo;
 
   const rowsContrib=contrib.filter(c=>c.monto>0).map(c=>`
     <div style="display:grid;grid-template-columns:1fr 60px 110px 110px;padding:5px 12px;font-size:12px;border-bottom:0.5px solid var(--border);">
@@ -2353,7 +2378,7 @@ async function verRecibo(reciboId){
         </div>
         <div style="padding:8px 12px;">
           <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">CATEGORÍA</div>
-          <div style="font-size:13px;font-weight:600;">${datos['Categoria']||emp.categoria||'—'}</div>
+          <div style="font-size:13px;font-weight:600;">${r.datos_json?.['Categoria']||emp.categoria||'—'}</div>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);border-bottom:2px solid var(--border);">
@@ -2719,64 +2744,162 @@ function actualizarBarraSeleccion(){
   barra.classList.toggle('visible',seleccionados.size>0);
 }
 
+// ─── GENERADOR NATIVO DE PDF (vectorial, no captura de pantalla) ───
+// Dibuja texto/tablas reales con jsPDF + autoTable en vez de sacarle una "foto"
+// al HTML. Resultado: archivos livianos (KB en vez de MB) y cada recibo entra,
+// en el 99% de los casos, en una sola página — sin depender del navegador ni de
+// temporizadores de renderizado.
+
+function _drawBarraTitulo(pdf,titulo,valor,x,y,width){
+  const h=6;
+  pdf.setFillColor(26,46,90);
+  pdf.rect(x,y,width,h,'F');
+  pdf.setTextColor(255,255,255);
+  pdf.setFont('helvetica','bold');pdf.setFontSize(8);
+  pdf.text(titulo,x+2,y+4.2);
+  pdf.text(valor,x+width-2,y+4.2,{align:'right'});
+  return y+h+1.5;
+}
+
+function dibujarReciboPDF(pdf,datosRecibo){
+  const{r,conceptos,remBase,totales,contrib,totalContrib,costoTotal,emp,empresa}=datosRecibo;
+  const pageWidth=pdf.internal.pageSize.getWidth();
+  const marginX=10;
+  const usableWidth=pageWidth-marginX*2;
+  let y=12;
+
+  // Encabezado
+  pdf.setFont('helvetica','bold');pdf.setFontSize(12);pdf.setTextColor(26,46,90);
+  pdf.text(empresa.nombre||'—',marginX,y);
+  pdf.setFont('helvetica','normal');pdf.setFontSize(7.5);pdf.setTextColor(90,100,120);
+  pdf.text('Decreto 407/2026 · Art. 140 LCT',pageWidth-marginX,y-2,{align:'right'});
+  y+=4.5;
+  pdf.text(`CUIT: ${fc(empresa.cuit||'')} · ${empresa.domicilio||''}`,marginX,y);
+  y+=3;
+  pdf.setDrawColor(26,46,90);pdf.setLineWidth(0.6);
+  pdf.line(marginX,y,pageWidth-marginX,y);
+  y+=5;
+
+  // Datos del empleado (2 filas x 3 columnas)
+  const colW=usableWidth/3;
+  const drawDatosRow=(fila,yRow)=>{
+    fila.forEach((par,i)=>{
+      const x=marginX+colW*i;
+      pdf.setFont('helvetica','normal');pdf.setFontSize(6.5);pdf.setTextColor(140,148,165);
+      pdf.text(par[0],x,yRow);
+      pdf.setFont('helvetica','bold');pdf.setFontSize(8.5);pdf.setTextColor(30,30,40);
+      pdf.text(String(par[1]),x,yRow+3.6,{maxWidth:colW-3});
+    });
+  };
+  drawDatosRow([['APELLIDO Y NOMBRE',emp.nombre||'—'],['CUIL',fc(emp.cuil||'')],['CATEGORÍA',r.datos_json?.['Categoria']||emp.categoria||'—']],y);
+  y+=8;
+  drawDatosRow([['PERÍODO',`${parseMes(r.periodo)} · ${r.tipo}`],['FECHA INGRESO',emp.fecha_ingreso||'—'],['OBRA SOCIAL',emp.obra_social||'—']],y);
+  y+=6;
+  pdf.setDrawColor(208,216,236);pdf.setLineWidth(0.3);
+  pdf.line(marginX,y,pageWidth-marginX,y);
+  y+=4;
+
+  // Si el recibo tiene muchos conceptos, achicamos la letra de esa tabla para
+  // que siga entrando en una sola página.
+  const nConc=conceptos.length;
+  const fsConc=nConc>22?5.8:nConc>15?6.5:7;
+
+  // COSTO TOTAL EMPLEADOR
+  y=_drawBarraTitulo(pdf,'COSTO TOTAL EMPLEADOR',mon(costoTotal),marginX,y,usableWidth);
+  const contribRows=contrib.filter(c=>c.monto>0).map(c=>[
+    c.nombre,c.tipo==='pct'?c.pct.toFixed(2)+'%':'fijo',c.tipo==='pct'?mon(remBase):'—',mon(c.monto)
+  ]);
+  if(contribRows.length){
+    pdf.autoTable({
+      startY:y,margin:{left:marginX,right:marginX},theme:'plain',
+      styles:{fontSize:7,cellPadding:0.9,textColor:[50,58,75]},
+      columnStyles:{0:{cellWidth:usableWidth-85},1:{cellWidth:20,halign:'right'},2:{cellWidth:35,halign:'right'},3:{cellWidth:30,halign:'right'}},
+      body:contribRows,
+    });
+    y=pdf.lastAutoTable.finalY+1;
+  }
+  pdf.setFillColor(232,237,245);
+  pdf.rect(marginX,y,usableWidth,5,'F');
+  pdf.setFont('helvetica','bold');pdf.setFontSize(7.5);pdf.setTextColor(26,46,90);
+  pdf.text('SUBTOTAL CONTRIBUCIONES',marginX+2,y+3.5);
+  pdf.text(mon(totalContrib),pageWidth-marginX-2,y+3.5,{align:'right'});
+  y+=8;
+
+  // SUELDO BRUTO + detalle de conceptos
+  y=_drawBarraTitulo(pdf,'SUELDO BRUTO',mon(totales.bruto),marginX,y,usableWidth);
+  const conceptoTipos=[];
+  const conceptoRows=conceptos.map(c=>{
+    const etiquetaCalculo=c.calculo==='pct'?(c.porcentaje!=null?c.porcentaje+'%':'Porcentaje'):c.calculo==='fijo'?'Monto fijo':'—';
+    const conceptoBase=c.base_codigo?conceptos.find(x=>x.cod===c.base_codigo):null;
+    const baseUsada=conceptoBase?conceptoBase.importe:remBase;
+    const baseTexto=c.calculo==='pct'?(conceptoBase?`${mon(baseUsada)} (s/ conc. ${c.base_codigo})`:mon(baseUsada)):'—';
+    conceptoTipos.push(c.tipo);
+    return[`${c.cod}. ${c.nombre}`,etiquetaCalculo,baseTexto,mon(c.importe)];
+  });
+  pdf.autoTable({
+    startY:y,margin:{left:marginX,right:marginX},theme:'plain',
+    styles:{fontSize:fsConc,cellPadding:0.9},
+    columnStyles:{0:{cellWidth:usableWidth-108},1:{cellWidth:23,halign:'right'},2:{cellWidth:55,halign:'right',fontSize:fsConc-0.5},3:{cellWidth:30,halign:'right'}},
+    body:conceptoRows,
+    didParseCell:(data)=>{
+      if(data.column.index!==3)return;
+      const tipo=conceptoTipos[data.row.index];
+      if(tipo==='ded'||tipo==='ded_rem')data.cell.styles.textColor=[229,62,62];
+      else if(tipo==='norem')data.cell.styles.textColor=[133,79,11];
+      else if(tipo==='desconocido')data.cell.styles.textColor=[194,65,12];
+    }
+  });
+  y=pdf.lastAutoTable.finalY+2;
+
+  // Resumen Remunerativo / No Remunerativo / Descuentos
+  pdf.setFillColor(248,249,251);
+  pdf.rect(marginX,y,usableWidth,6,'F');
+  pdf.setDrawColor(208,216,236);pdf.setLineWidth(0.2);
+  pdf.line(marginX,y,pageWidth-marginX,y);
+  pdf.setFont('helvetica','bold');pdf.setFontSize(7.5);pdf.setTextColor(60,68,85);
+  pdf.text(`Remunerativo: ${mon(totales.rem)}`,marginX+2,y+4);
+  pdf.text(`No Remunerativo: ${mon(totales.norem)}`,pageWidth/2,y+4,{align:'center'});
+  pdf.text(`Descuentos: ${mon(totales.dedLegal)}`,pageWidth-marginX-2,y+4,{align:'right'});
+  y+=9;
+
+  // NETO A COBRAR
+  pdf.setFillColor(26,46,90);
+  pdf.rect(marginX,y,usableWidth,10,'F');
+  pdf.setTextColor(255,255,255);
+  pdf.setFont('helvetica','bold');pdf.setFontSize(9);
+  pdf.text('SUELDO NETO A COBRAR',marginX+3,y+6.5);
+  pdf.setFontSize(13);
+  pdf.text(mon(r.neto_redondeado||r.neto),pageWidth-marginX-3,y+6.8,{align:'right'});
+}
+
 async function generarPDFMultiple(){
   const ids=[...seleccionados];
   if(!ids.length)return;
-  if(ids.length>25){
-    const continuar=confirm(`Vas a combinar ${ids.length} recibos en un solo PDF. Con lotes grandes es más probable que el archivo se vuelva demasiado pesado para el navegador y falle.\n\n¿Preferís seguir igual, o cancelar y descargarlos en tandas más chicas (por ejemplo de a 15-20)?`);
-    if(!continuar)return;
-  }
   const btn=document.querySelector('#barra-seleccion .btn-gold');
   const textoOriginal=btn?btn.textContent:'';
   if(btn){btn.disabled=true;btn.textContent='Generando...';}
   try{
     const{jsPDF}=window.jspdf;
     const pdf=new jsPDF({orientation:'p',unit:'mm',format:'a4',compress:true});
-    const pageWidth=pdf.internal.pageSize.getWidth();
-    const pageHeight=pdf.internal.pageSize.getHeight();
     let primero=true;
     for(const reciboId of ids){
       let nombreEmpleado=reciboId;
       try{
-        const{data:reciboInfo}=await sb.from('recibos').select('empleados(nombre)').eq('id',reciboId).single();
-        nombreEmpleado=reciboInfo?.empleados?.nombre||reciboId;
-
-        await verRecibo(reciboId);
-        const contenedor=document.getElementById('modal-recibo-body');
-        if(!contenedor)throw new Error('No se encontró el contenido del recibo en el modal.');
-        await new Promise(r=>setTimeout(r,500));
-        if(!contenedor.offsetWidth||!contenedor.offsetHeight)throw new Error('El recibo no se llegó a renderizar (ancho/alto en 0).');
-
-        const canvas=await html2canvas(contenedor,{scale:1.5,backgroundColor:'#ffffff',useCORS:true});
-        if(!canvas.width||!canvas.height)throw new Error('html2canvas generó un lienzo vacío (0x0).');
-
-        const imgData=canvas.toDataURL('image/jpeg',0.92);
-        const imgWidth=pageWidth-20;
-        const imgHeight=(canvas.height*imgWidth)/canvas.width;
+        const datosRecibo=await calcularDatosRecibo(reciboId);
+        if(!datosRecibo)throw new Error('No se encontró el recibo en la base.');
+        nombreEmpleado=datosRecibo.emp?.nombre||reciboId;
         if(!primero)pdf.addPage();
         primero=false;
-        let heightLeft=imgHeight;
-        let position=10;
-        pdf.addImage(imgData,'JPEG',10,position,imgWidth,Math.min(imgHeight,pageHeight-20));
-        heightLeft-=(pageHeight-20);
-        while(heightLeft>0){
-          position=heightLeft-imgHeight+10;
-          pdf.addPage();
-          pdf.addImage(imgData,'JPEG',10,position,imgWidth,imgHeight);
-          heightLeft-=pageHeight;
-        }
+        dibujarReciboPDF(pdf,datosRecibo);
       }catch(errItem){
         console.error(`Error generando PDF para "${nombreEmpleado}" (recibo ${reciboId}):`,errItem);
         throw new Error(`Falló en el recibo de "${nombreEmpleado}": ${errItem.message||errItem}`);
       }
     }
-    cerrarModal('modal-ver-recibo');
     pdf.save(`recibos_${ids.length}_${Date.now()}.pdf`);
   }catch(err){
     console.error('Error generando PDF combinado:',err);
-    const esMuyPesado=/invalid string length/i.test(err.message||'');
-    const sugerencia=esMuyPesado?`El archivo combinado quedó demasiado pesado para el navegador (${ids.length} recibos). Probá con una tanda más chica, por ejemplo de a 10-15 recibos.`:'Probá de nuevo o descargá los recibos uno por uno.';
-    alert(`No se pudo generar el PDF combinado.\n\n${err.message||err}\n\n${sugerencia}`);
+    alert(`No se pudo generar el PDF combinado.\n\n${err.message||err}\n\nProbá de nuevo o descargá los recibos uno por uno.`);
   }finally{
     if(btn){btn.disabled=false;btn.textContent=textoOriginal;}
   }
@@ -2784,36 +2907,12 @@ async function generarPDFMultiple(){
 
 async function generarPDFRecibo(reciboId,cerrarAlTerminar,esVistaEmpleado){
   if(cerrarAlTerminar===undefined) cerrarAlTerminar=true;
-  // Volvemos a abrir el contenido del recibo (oculto) para capturarlo
-  await verRecibo(reciboId);
-  const contenedor=document.getElementById('modal-recibo-body');
-  if(!contenedor){return;}
-
-  // Esperar a que el gráfico termine de renderizar
-  await new Promise(r=>setTimeout(r,300));
-
   try{
-    const canvas=await html2canvas(contenedor,{scale:2,backgroundColor:'#ffffff',useCORS:true});
-    const imgData=canvas.toDataURL('image/png');
+    const datosRecibo=await calcularDatosRecibo(reciboId);
+    if(!datosRecibo){alert('No se encontró el recibo.');return;}
     const{jsPDF}=window.jspdf;
-    const pdf=new jsPDF('p','mm','a4');
-    const pageWidth=pdf.internal.pageSize.getWidth();
-    const pageHeight=pdf.internal.pageSize.getHeight();
-    const imgWidth=pageWidth-20;
-    const imgHeight=(canvas.height*imgWidth)/canvas.width;
-
-    let heightLeft=imgHeight;
-    let position=10;
-    pdf.addImage(imgData,'PNG',10,position,imgWidth,Math.min(imgHeight,pageHeight-20));
-    heightLeft-=(pageHeight-20);
-
-    while(heightLeft>0){
-      position=heightLeft-imgHeight+10;
-      pdf.addPage();
-      pdf.addImage(imgData,'PNG',10,position,imgWidth,imgHeight);
-      heightLeft-=pageHeight;
-    }
-
+    const pdf=new jsPDF({orientation:'p',unit:'mm',format:'a4',compress:true});
+    dibujarReciboPDF(pdf,datosRecibo);
     const nombreArchivo=`recibo_${reciboId.slice(0,8)}.pdf`;
     pdf.save(nombreArchivo);
   }catch(err){
