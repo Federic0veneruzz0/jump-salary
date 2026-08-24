@@ -2722,12 +2722,16 @@ function actualizarBarraSeleccion(){
 async function generarPDFMultiple(){
   const ids=[...seleccionados];
   if(!ids.length)return;
+  if(ids.length>25){
+    const continuar=confirm(`Vas a combinar ${ids.length} recibos en un solo PDF. Con lotes grandes es más probable que el archivo se vuelva demasiado pesado para el navegador y falle.\n\n¿Preferís seguir igual, o cancelar y descargarlos en tandas más chicas (por ejemplo de a 15-20)?`);
+    if(!continuar)return;
+  }
   const btn=document.querySelector('#barra-seleccion .btn-gold');
   const textoOriginal=btn?btn.textContent:'';
   if(btn){btn.disabled=true;btn.textContent='Generando...';}
   try{
     const{jsPDF}=window.jspdf;
-    const pdf=new jsPDF('p','mm','a4');
+    const pdf=new jsPDF({orientation:'p',unit:'mm',format:'a4',compress:true});
     const pageWidth=pdf.internal.pageSize.getWidth();
     const pageHeight=pdf.internal.pageSize.getHeight();
     let primero=true;
@@ -2743,22 +2747,22 @@ async function generarPDFMultiple(){
         await new Promise(r=>setTimeout(r,500));
         if(!contenedor.offsetWidth||!contenedor.offsetHeight)throw new Error('El recibo no se llegó a renderizar (ancho/alto en 0).');
 
-        const canvas=await html2canvas(contenedor,{scale:2,backgroundColor:'#ffffff',useCORS:true});
+        const canvas=await html2canvas(contenedor,{scale:1.5,backgroundColor:'#ffffff',useCORS:true});
         if(!canvas.width||!canvas.height)throw new Error('html2canvas generó un lienzo vacío (0x0).');
 
-        const imgData=canvas.toDataURL('image/png');
+        const imgData=canvas.toDataURL('image/jpeg',0.92);
         const imgWidth=pageWidth-20;
         const imgHeight=(canvas.height*imgWidth)/canvas.width;
         if(!primero)pdf.addPage();
         primero=false;
         let heightLeft=imgHeight;
         let position=10;
-        pdf.addImage(imgData,'PNG',10,position,imgWidth,Math.min(imgHeight,pageHeight-20));
+        pdf.addImage(imgData,'JPEG',10,position,imgWidth,Math.min(imgHeight,pageHeight-20));
         heightLeft-=(pageHeight-20);
         while(heightLeft>0){
           position=heightLeft-imgHeight+10;
           pdf.addPage();
-          pdf.addImage(imgData,'PNG',10,position,imgWidth,imgHeight);
+          pdf.addImage(imgData,'JPEG',10,position,imgWidth,imgHeight);
           heightLeft-=pageHeight;
         }
       }catch(errItem){
@@ -2770,7 +2774,9 @@ async function generarPDFMultiple(){
     pdf.save(`recibos_${ids.length}_${Date.now()}.pdf`);
   }catch(err){
     console.error('Error generando PDF combinado:',err);
-    alert(`No se pudo generar el PDF combinado.\n\n${err.message||err}\n\nProbá de nuevo o descargá los recibos uno por uno.`);
+    const esMuyPesado=/invalid string length/i.test(err.message||'');
+    const sugerencia=esMuyPesado?`El archivo combinado quedó demasiado pesado para el navegador (${ids.length} recibos). Probá con una tanda más chica, por ejemplo de a 10-15 recibos.`:'Probá de nuevo o descargá los recibos uno por uno.';
+    alert(`No se pudo generar el PDF combinado.\n\n${err.message||err}\n\n${sugerencia}`);
   }finally{
     if(btn){btn.disabled=false;btn.textContent=textoOriginal;}
   }
