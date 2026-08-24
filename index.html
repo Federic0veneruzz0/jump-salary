@@ -852,6 +852,20 @@ tr:last-child td{border-bottom:none;}
   </div>
 </div>
 
+<!-- MODAL AGREGAR OBRA SOCIAL (desde el legajo) -->
+<div class="modal-overlay" id="modal-agregar-os">
+  <div class="modal">
+    <div class="modal-title">Agregar Obra Social al catálogo</div>
+    <div class="modal-sub">Queda disponible al instante para este legajo y para todos los demás.</div>
+    <div class="field"><label>Nombre</label><input type="text" id="nueva-os-legajo-nombre" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:14px;" placeholder="Ej: OSDE, Obra Social de los Músicos..."></div>
+    <div class="field"><label>Código (opcional)</label><input type="text" id="nueva-os-legajo-codigo" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:14px;"></div>
+    <div class="modal-actions">
+      <button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-agregar-os')">Cancelar</button>
+      <button class="btn-sm btn-gold" style="flex:1;" onclick="confirmarAgregarObraSocialDesdeLegajo()">+ Agregar</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL ELIMINAR RECIBO -->
 <div class="modal-overlay" id="modal-eliminar-recibo">
   <div class="modal">
@@ -3389,23 +3403,33 @@ async function poblarDatalistObrasSociales(){
 
 // Permite cargar una Obra Social nueva al catálogo sin salir del legajo. Queda
 // disponible al instante en el datalist y también en el catálogo de Convenios.
-async function agregarObraSocialDesdeLegajo(){
+function agregarObraSocialDesdeLegajo(){
+  const sugerido=document.getElementById('legajo-os').value.trim();
+  document.getElementById('nueva-os-legajo-nombre').value=sugerido;
+  document.getElementById('nueva-os-legajo-codigo').value='';
+  abrirModal('modal-agregar-os');
+  setTimeout(()=>document.getElementById('nueva-os-legajo-nombre').focus(),50);
+}
+
+async function confirmarAgregarObraSocialDesdeLegajo(){
+  const nombre=document.getElementById('nueva-os-legajo-nombre').value.trim();
+  if(!nombre){alert('Ingresá un nombre.');return;}
+  const codigo=document.getElementById('nueva-os-legajo-codigo').value.trim()||null;
   const inputOs=document.getElementById('legajo-os');
-  const sugerido=inputOs.value.trim();
-  const nombre=(prompt('Nombre de la nueva Obra Social:',sugerido)||'').trim();
-  if(!nombre)return;
-  const codigo=(prompt('Código (opcional, dejar vacío si no aplica):','')||'').trim()||null;
   const{data:existentes}=await sb.from('obras_sociales').select('id,nombre');
   const duplicado=existentes?.find(o=>o.nombre.toLowerCase()===nombre.toLowerCase());
   if(duplicado){
-    alert(`Ya existe "${duplicado.nombre}" en el catálogo — la elijo.`);
     inputOs.value=duplicado.nombre;
+    document.getElementById('legajo-os-hint').textContent='';
+    cerrarModal('modal-agregar-os');
+    showToast(`Ya existía "${duplicado.nombre}" en el catálogo — la elegí.`);
     return;
   }
   const{error}=await sb.from('obras_sociales').insert({nombre,codigo});
   if(error){alert('No se pudo agregar: '+error.message);return;}
   inputOs.value=nombre;
   document.getElementById('legajo-os-hint').textContent='';
+  cerrarModal('modal-agregar-os');
   showToast('✅ Obra Social agregada al catálogo.');
   poblarDatalistObrasSociales();
 }
