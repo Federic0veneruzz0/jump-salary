@@ -2008,10 +2008,11 @@ async function cargarTablaEmpleados(empId){
   const{data:usuariosData}=await sb.from('usuarios').select('cuit_cuil,email,primer_acceso').in('cuit_cuil',cuils);
   const mapUsuarios={};
   usuariosData?.forEach(u=>mapUsuarios[nc(u.cuit_cuil)]=u);
-  const{data:legajosData}=await sb.from('legajo_empleado').select('empleado_id,categoria').in('empleado_id',empleados.map(e=>e.id));
-  const mapLegajos={};
-  legajosData?.forEach(l=>{if(l.categoria)mapLegajos[l.empleado_id]=l.categoria;});
-  let html=`<table><thead><tr><th>Nombre</th><th>CUIL</th><th>Categoría</th><th>Ingreso</th><th>Acceso</th><th></th></tr></thead><tbody>`;
+  const{data:legajosData}=await sb.from('legajo_empleado').select('empleado_id,categoria,fecha_baja').in('empleado_id',empleados.map(e=>e.id));
+  const mapLegajos={},mapFechaBaja={};
+  legajosData?.forEach(l=>{if(l.categoria)mapLegajos[l.empleado_id]=l.categoria;if(l.fecha_baja)mapFechaBaja[l.empleado_id]=l.fecha_baja;});
+  const mostrarBaja=_vistaEmpleadosContador==='inactivos';
+  let html=`<table><thead><tr><th>Nombre</th><th>CUIL</th><th>Categoría</th><th>Ingreso</th>${mostrarBaja?'<th>Baja</th>':''}<th>Acceso</th><th></th></tr></thead><tbody>`;
   empleados.forEach(e=>{
     const u=mapUsuarios[nc(e.cuil)];
     let estadoAcceso;
@@ -2020,7 +2021,8 @@ async function cargarTablaEmpleados(empId){
     else if(u.email){estadoAcceso=u.email;}
     else{estadoAcceso='<span style="color:var(--text3)">Sin email de recuperación</span>';}
     const categoriaFinal=mapLegajos[e.id]||e.categoria||'—';
-    html+=`<tr><td><strong>${e.nombre}</strong>${!e.activo?' <span style="font-size:11px;color:var(--text3);font-weight:400;">(dado de baja)</span>':''}</td><td>${fc(e.cuil)}</td><td>${categoriaFinal}</td><td>${e.fecha_ingreso||'—'}</td><td>${estadoAcceso}</td><td style="white-space:nowrap;"><button class="btn-sm btn-outline" style="margin-right:5px;" onclick="abrirLegajoEmpleado('${e.id}','${(e.nombre||'').replace(/'/g,"\\'")}')">📁 Legajo</button><button class="btn-sm btn-outline" onclick="resetearAccesoEmpleado('${e.id}','${(e.nombre||'').replace(/'/g,"\\'")}')">Resetear acceso</button></td></tr>`;
+    const fechaBajaTd=mostrarBaja?`<td>${mapFechaBaja[e.id]||'<span style="color:var(--text3)">—</span>'}</td>`:'';
+    html+=`<tr><td><strong>${e.nombre}</strong>${!e.activo?' <span style="font-size:11px;color:var(--text3);font-weight:400;">(dado de baja)</span>':''}</td><td>${fc(e.cuil)}</td><td>${categoriaFinal}</td><td>${e.fecha_ingreso||'—'}</td>${fechaBajaTd}<td>${estadoAcceso}</td><td style="white-space:nowrap;"><button class="btn-sm btn-outline" style="margin-right:5px;" onclick="abrirLegajoEmpleado('${e.id}','${(e.nombre||'').replace(/'/g,"\\'")}')">📁 Legajo</button><button class="btn-sm btn-outline" onclick="resetearAccesoEmpleado('${e.id}','${(e.nombre||'').replace(/'/g,"\\'")}')">Resetear acceso</button></td></tr>`;
   });
   html+=`</tbody></table>`;
   document.getElementById('tabla-empleados').innerHTML=html;
@@ -2048,10 +2050,11 @@ async function cargarEmpleadosEmpleador(){
   const{data:usuariosData}=await sb.from('usuarios').select('cuit_cuil,email,primer_acceso').in('cuit_cuil',cuils);
   const mapUsuarios={};
   usuariosData?.forEach(u=>mapUsuarios[nc(u.cuit_cuil)]=u);
-  const{data:legajosData}=await sb.from('legajo_empleado').select('empleado_id,categoria').in('empleado_id',empleados.map(e=>e.id));
-  const mapLegajos={};
-  legajosData?.forEach(l=>{if(l.categoria)mapLegajos[l.empleado_id]=l.categoria;});
-  let html=`<table><thead><tr><th>Nombre</th><th>CUIL</th><th>Categoría</th><th>Ingreso</th><th>Acceso</th><th></th></tr></thead><tbody>`;
+  const{data:legajosData}=await sb.from('legajo_empleado').select('empleado_id,categoria,fecha_baja').in('empleado_id',empleados.map(e=>e.id));
+  const mapLegajos={},mapFechaBaja={};
+  legajosData?.forEach(l=>{if(l.categoria)mapLegajos[l.empleado_id]=l.categoria;if(l.fecha_baja)mapFechaBaja[l.empleado_id]=l.fecha_baja;});
+  const mostrarBaja=_vistaEmpleadosEmpleador==='inactivos';
+  let html=`<table><thead><tr><th>Nombre</th><th>CUIL</th><th>Categoría</th><th>Ingreso</th>${mostrarBaja?'<th>Baja</th>':''}<th>Acceso</th><th></th></tr></thead><tbody>`;
   empleados.forEach(e=>{
     const u=mapUsuarios[nc(e.cuil)];
     let estadoAcceso;
@@ -2060,7 +2063,8 @@ async function cargarEmpleadosEmpleador(){
     else if(u.email){estadoAcceso=u.email;}
     else{estadoAcceso='<span style="color:var(--text3)">Sin email de recuperación</span>';}
     const categoriaFinal=mapLegajos[e.id]||e.categoria||'—';
-    html+=`<tr><td><strong>${e.nombre}</strong>${!e.activo?' <span style="font-size:11px;color:var(--text3);font-weight:400;">(dado de baja)</span>':''}</td><td>${fc(e.cuil)}</td><td>${categoriaFinal}</td><td>${e.fecha_ingreso||'—'}</td><td>${estadoAcceso}</td><td style="white-space:nowrap;"><button class="btn-sm btn-outline" style="margin-right:5px;" onclick="abrirLegajoEmpleado('${e.id}','${(e.nombre||'').replace(/'/g,"\\'")}')">📁 Legajo</button><button class="btn-sm btn-outline" onclick="resetearAccesoEmpleado('${e.id}','${(e.nombre||'').replace(/'/g,"\\'")}')">Resetear acceso</button></td></tr>`;
+    const fechaBajaTd=mostrarBaja?`<td>${mapFechaBaja[e.id]||'<span style="color:var(--text3)">—</span>'}</td>`:'';
+    html+=`<tr><td><strong>${e.nombre}</strong>${!e.activo?' <span style="font-size:11px;color:var(--text3);font-weight:400;">(dado de baja)</span>':''}</td><td>${fc(e.cuil)}</td><td>${categoriaFinal}</td><td>${e.fecha_ingreso||'—'}</td>${fechaBajaTd}<td>${estadoAcceso}</td><td style="white-space:nowrap;"><button class="btn-sm btn-outline" style="margin-right:5px;" onclick="abrirLegajoEmpleado('${e.id}','${(e.nombre||'').replace(/'/g,"\\'")}')">📁 Legajo</button><button class="btn-sm btn-outline" onclick="resetearAccesoEmpleado('${e.id}','${(e.nombre||'').replace(/'/g,"\\'")}')">Resetear acceso</button></td></tr>`;
   });
   html+=`</tbody></table>`;
   document.getElementById('tabla-empleados-empleador').innerHTML=html;
