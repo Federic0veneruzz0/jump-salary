@@ -449,6 +449,7 @@ tr:last-child td{border-bottom:none;}
             <select id="filtro-periodo-emp" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" onchange="cargarRecibosEmpleador()">
               <option value="">Todos los períodos</option>
             </select>
+            <button class="btn-sm btn-outline" onclick="abrirModalListado(false)">📋 Generar listado</button>
           </div>
         </div>
         <div id="tabla-recibos-empleador"><div class="loading">Cargando...</div></div>
@@ -3958,13 +3959,14 @@ async function abrirModalListado(desdeSeleccion){
     }
     if(sub)sub.textContent='Elegí los datos a incluir para los empleados seleccionados.';
   } else {
-    if(!empresaActivaId){alert('Seleccioná una empresa en el panel superior primero.');return;}
+    const empIdListado=empresaIdParaLegajo();
+    if(!empIdListado){alert('Seleccioná una empresa en el panel superior primero.');return;}
     if(campoPeriodo)campoPeriodo.style.display='block';
     if(campoTipo)campoTipo.style.display='block';
     if(campoSeleccion)campoSeleccion.style.display='none';
     if(sub)sub.textContent='Elegí el período, el tipo de liquidación y los datos a incluir. Se genera para la empresa activa.';
     const sel=document.getElementById('select-periodo-listado');
-    const{data:periodosData}=await sb.from('recibos').select('periodo').eq('empresa_id',empresaActivaId);
+    const{data:periodosData}=await sb.from('recibos').select('periodo').eq('empresa_id',empIdListado);
     const periodosDisponibles=[...new Set((periodosData||[]).map(p=>p.periodo).filter(Boolean))].sort((a,b)=>b.localeCompare(a));
     if(sel){
       sel.innerHTML=periodosDisponibles.length
@@ -3972,7 +3974,7 @@ async function abrirModalListado(desdeSeleccion){
         :'<option value="">Sin períodos disponibles</option>';
     }
     const selTipo=document.getElementById('select-tipo-listado');
-    const{data:tiposData}=await sb.from('recibos').select('tipo').eq('empresa_id',empresaActivaId);
+    const{data:tiposData}=await sb.from('recibos').select('tipo').eq('empresa_id',empIdListado);
     const tiposDisponibles=[...new Set((tiposData||[]).map(t=>t.tipo).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
     if(selTipo){
       selTipo.innerHTML='<option value="">Todos los tipos</option>'+tiposDisponibles.map(t=>`<option value="${t}">${t}</option>`).join('');
@@ -4004,7 +4006,7 @@ async function generarListadoEmpleados(){
       periodo=document.getElementById('select-periodo-listado')?.value;
       if(!periodo){alert('Seleccioná un período.');return;}
       const tipoFiltro=document.getElementById('select-tipo-listado')?.value;
-      let qList=sb.from('recibos').select('*,empleados(nombre,cuil,fecha_ingreso)').eq('empresa_id',empresaActivaId).eq('periodo',periodo);
+      let qList=sb.from('recibos').select('*,empleados(nombre,cuil,fecha_ingreso)').eq('empresa_id',empresaIdParaLegajo()).eq('periodo',periodo);
       if(tipoFiltro)qList=qList.eq('tipo',tipoFiltro);
       const{data}=await qList;
       recibos=data;
@@ -4061,8 +4063,8 @@ async function generarListadoEmpleados(){
       mostrarEmpresa,
       incluirBruto,incluirNoRem,incluirOS,incluirNeto,
     };
-    if(!mostrarEmpresa&&empresaActivaId){
-      const{data:empresaData}=await sb.from('empresas').select('nombre').eq('id',empresaActivaId).maybeSingle();
+    if(!mostrarEmpresa&&empresaIdParaLegajo()){
+      const{data:empresaData}=await sb.from('empresas').select('nombre').eq('id',empresaIdParaLegajo()).maybeSingle();
       window._listadoActual.empresaNombre=empresaData?.nombre||'';
     }
 
