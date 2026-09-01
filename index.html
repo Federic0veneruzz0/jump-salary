@@ -628,6 +628,12 @@ tr:last-child td{border-bottom:none;}
       <label>Período</label>
       <select id="select-periodo-listado" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:14px;"></select>
     </div>
+    <div class="field" id="campo-tipo-listado" style="margin-top:12px;">
+      <label>Tipo de liquidación</label>
+      <select id="select-tipo-listado" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:14px;">
+        <option value="">Todos los tipos</option>
+      </select>
+    </div>
     <div id="campo-seleccion-listado" style="display:none;margin-top:12px;padding:10px 12px;background:var(--surface-1,#f8f9fb);border-radius:var(--radius);font-size:13px;color:var(--text2);"></div>
     <div class="field" style="margin-top:12px;">
       <label>Ordenar por</label>
@@ -3938,12 +3944,14 @@ let _listadoDesdeSeleccion=false;
 async function abrirModalListado(desdeSeleccion){
   _listadoDesdeSeleccion=!!desdeSeleccion;
   const campoPeriodo=document.getElementById('campo-periodo-listado');
+  const campoTipo=document.getElementById('campo-tipo-listado');
   const campoSeleccion=document.getElementById('campo-seleccion-listado');
   const sub=document.getElementById('listado-config-sub');
 
   if(_listadoDesdeSeleccion){
     if(!seleccionados.size){alert('Seleccioná al menos un empleado en la tabla de recibos.');return;}
     if(campoPeriodo)campoPeriodo.style.display='none';
+    if(campoTipo)campoTipo.style.display='none';
     if(campoSeleccion){
       campoSeleccion.style.display='block';
       campoSeleccion.textContent=`Se va a generar el listado con los ${seleccionados.size} empleado(s) seleccionado(s).`;
@@ -3952,8 +3960,9 @@ async function abrirModalListado(desdeSeleccion){
   } else {
     if(!empresaActivaId){alert('Seleccioná una empresa en el panel superior primero.');return;}
     if(campoPeriodo)campoPeriodo.style.display='block';
+    if(campoTipo)campoTipo.style.display='block';
     if(campoSeleccion)campoSeleccion.style.display='none';
-    if(sub)sub.textContent='Elegí el período y los datos a incluir. Se genera para la empresa activa.';
+    if(sub)sub.textContent='Elegí el período, el tipo de liquidación y los datos a incluir. Se genera para la empresa activa.';
     const sel=document.getElementById('select-periodo-listado');
     const{data:periodosData}=await sb.from('recibos').select('periodo').eq('empresa_id',empresaActivaId);
     const periodosDisponibles=[...new Set((periodosData||[]).map(p=>p.periodo).filter(Boolean))].sort((a,b)=>b.localeCompare(a));
@@ -3961,6 +3970,12 @@ async function abrirModalListado(desdeSeleccion){
       sel.innerHTML=periodosDisponibles.length
         ?periodosDisponibles.map(p=>`<option value="${p}">${parseMes(p)}</option>`).join('')
         :'<option value="">Sin períodos disponibles</option>';
+    }
+    const selTipo=document.getElementById('select-tipo-listado');
+    const{data:tiposData}=await sb.from('recibos').select('tipo').eq('empresa_id',empresaActivaId);
+    const tiposDisponibles=[...new Set((tiposData||[]).map(t=>t.tipo).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+    if(selTipo){
+      selTipo.innerHTML='<option value="">Todos los tipos</option>'+tiposDisponibles.map(t=>`<option value="${t}">${t}</option>`).join('');
     }
   }
   abrirModal('modal-listado-config');
@@ -3988,9 +4003,12 @@ async function generarListadoEmpleados(){
     } else {
       periodo=document.getElementById('select-periodo-listado')?.value;
       if(!periodo){alert('Seleccioná un período.');return;}
-      const{data}=await sb.from('recibos').select('*,empleados(nombre,cuil,fecha_ingreso)').eq('empresa_id',empresaActivaId).eq('periodo',periodo);
+      const tipoFiltro=document.getElementById('select-tipo-listado')?.value;
+      let qList=sb.from('recibos').select('*,empleados(nombre,cuil,fecha_ingreso)').eq('empresa_id',empresaActivaId).eq('periodo',periodo);
+      if(tipoFiltro)qList=qList.eq('tipo',tipoFiltro);
+      const{data}=await qList;
       recibos=data;
-      tituloListado=parseMes(periodo);
+      tituloListado=parseMes(periodo)+(tipoFiltro?` · ${tipoFiltro}`:'');
     }
     if(!recibos?.length){alert('No hay recibos para generar el listado.');return;}
 
