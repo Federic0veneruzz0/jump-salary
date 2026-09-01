@@ -4053,7 +4053,18 @@ async function generarListadoEmpleados(){
     }
     const mostrarFechaIngreso=ordenPor==='fecha_ingreso';
 
-    window._listadoActual={periodo:periodo||'seleccion'};
+    window._listadoActual={
+      periodo:periodo||'seleccion',
+      tituloListado,
+      filas,
+      mostrarFechaIngreso,
+      mostrarEmpresa,
+      incluirBruto,incluirNoRem,incluirOS,incluirNeto,
+    };
+    if(!mostrarEmpresa&&empresaActivaId){
+      const{data:empresaData}=await sb.from('empresas').select('nombre').eq('id',empresaActivaId).maybeSingle();
+      window._listadoActual.empresaNombre=empresaData?.nombre||'';
+    }
 
     let cols='<th style="text-align:left;padding:6px 8px;">Nombre completo</th><th style="text-align:left;padding:6px 8px;">CUIL</th>';
     if(mostrarFechaIngreso)cols+='<th style="text-align:left;padding:6px 8px;">Fecha Ingreso</th>';
@@ -4094,36 +4105,69 @@ async function generarListadoEmpleados(){
 }
 
 async function exportarListadoPDF(){
-  const contenedor=document.getElementById('listado-pdf-contenedor');
-  if(!contenedor)return;
+  const datos=window._listadoActual;
+  if(!datos?.filas?.length){alert('No hay datos para exportar.');return;}
   const btn=document.getElementById('btn-exportar-listado-pdf');
   const textoOriginal=btn?btn.textContent:'';
   if(btn){btn.disabled=true;btn.textContent='Generando...';}
   try{
-    const canvas=await html2canvas(contenedor,{scale:2,backgroundColor:'#ffffff',useCORS:true});
-    const imgData=canvas.toDataURL('image/png');
     const{jsPDF}=window.jspdf;
-    const pdf=new jsPDF('p','mm','a4');
+    const pdf=new jsPDF({orientation:'p',unit:'mm',format:'a4',compress:true});
     const pageWidth=pdf.internal.pageSize.getWidth();
-    const pageHeight=pdf.internal.pageSize.getHeight();
-    const imgWidth=pageWidth-20;
-    const imgHeight=(canvas.height*imgWidth)/canvas.width;
+    const marginX=10;
+    const usableWidth=pageWidth-marginX*2;
 
-    let heightLeft=imgHeight;
-    let position=10;
-    pdf.addImage(imgData,'PNG',10,position,imgWidth,Math.min(imgHeight,pageHeight-20));
-    heightLeft-=(pageHeight-20);
-    while(heightLeft>0){
-      position=heightLeft-imgHeight+10;
-      pdf.addPage();
-      pdf.addImage(imgData,'PNG',10,position,imgWidth,imgHeight);
-      heightLeft-=pageHeight;
-    }
-    const periodo=window._listadoActual?.periodo||'listado';
+    // Encabezado
+    pdf.setFont('helvetica','bold');pdf.setFontSize(13);pdf.setTextColor(26,46,90);
+    pdf.text('Listado de empleados',marginX,14);
+    pdf.setFont('helvetica','normal');pdf.setFontSize(9);pdf.setTextColor(90,100,120);
+    const subtitulo=[datos.empresaNombre,datos.tituloListado].filter(Boolean).join(' · ');
+    pdf.text(subtitulo,marginX,20);
+    pdf.setDrawColor(26,46,90);pdf.setLineWidth(0.5);
+    pdf.line(marginX,23,pageWidth-marginX,23);
+
+    // Columnas dinámicas, igual criterio que la vista en pantalla
+    const head=['Nombre completo','CUIL'];
+    const colStyles={};
+    let idx=2;
+    if(datos.mostrarFechaIngreso){head.push('Fecha Ingreso');idx++;}
+    if(datos.mostrarEmpresa){head.push('Empresa');idx++;}
+    if(datos.incluirBruto){head.push('Bruto');colStyles[head.length-1]={halign:'right'};}
+    if(datos.incluirNoRem){head.push('No Remunerativo');colStyles[head.length-1]={halign:'right'};}
+    if(datos.incluirOS){head.push('Aporte OS');colStyles[head.length-1]={halign:'right'};}
+    if(datos.incluirNeto){head.push('Neto');colStyles[head.length-1]={halign:'right'};}
+
+    const body=datos.filas.map(f=>{
+      const fila=[f.nombre,f.cuil];
+      if(datos.mostrarFechaIngreso)fila.push(f.fechaIngreso||'—');
+      if(datos.mostrarEmpresa)fila.push(f.empresa);
+      if(datos.incluirBruto)fila.push(mon(f.bruto));
+      if(datos.incluirNoRem)fila.push(mon(f.norem));
+      if(datos.incluirOS)fila.push(mon(f.os));
+      if(datos.incluirNeto)fila.push(mon(f.neto));
+      return fila;
+    });
+
+    pdf.autoTable({
+      startY:27,
+      margin:{left:marginX,right:marginX},
+      head:[head],
+      body,
+      theme:'striped',
+      styles:{fontSize:8,cellPadding:2},
+      headStyles:{fillColor:[26,46,90],textColor:255,fontStyle:'bold'},
+      columnStyles:colStyles,
+      didDrawPage:(data)=>{
+        pdf.setFont('helvetica','normal');pdf.setFontSize(7.5);pdf.setTextColor(150,150,150);
+        pdf.text(`Página ${pdf.internal.getNumberOfPages()}`,pageWidth-marginX,pdf.internal.pageSize.getHeight()-6,{align:'right'});
+      }
+    });
+
+    const periodo=datos.periodo||'listado';
     pdf.save(`listado_empleados_${periodo}.pdf`);
   }catch(err){
     console.error('Error exportando PDF del listado:',err);
-    alert('No se pudo generar el PDF.');
+    alert('No se pudo generar el PDF.\n\n'+(err.message||err));
   }finally{
     if(btn){btn.disabled=false;btn.textContent=textoOriginal;}
   }
