@@ -4019,6 +4019,18 @@ async function generarListadoEmpleados(){
     }
     if(!recibos?.length){alert('No hay recibos para generar el listado.');return;}
 
+    // Si la selección manual mezcla recibos de más de una empresa, es fácil
+    // que se haya colado una fila sin querer (sobre todo si se armó desde la
+    // vista "todas las empresas"). Avisamos antes de seguir.
+    if(_listadoDesdeSeleccion){
+      const empresasEnSeleccion=[...new Map(recibos.map(r=>[r.empresa_id,r.empresas?.nombre||r.empresa_id])).entries()];
+      if(empresasEnSeleccion.length>1){
+        const detalle=empresasEnSeleccion.map(([,nombre])=>`• ${nombre}`).join('\n');
+        const continuar=confirm(`Ojo: esta selección tiene recibos de ${empresasEnSeleccion.length} empresas distintas:\n\n${detalle}\n\n¿Es correcto, o se coló algún recibo que no corresponde? Aceptar para seguir igual, Cancelar para volver y revisar la selección.`);
+        if(!continuar){if(btn){btn.disabled=false;btn.textContent=textoOriginal;}return;}
+      }
+    }
+
     // Agrupamos conceptos propios por empresa (puede haber más de una si viene de selección multi-empresa)
     const empresaIds=[...new Set(recibos.map(r=>r.empresa_id).filter(Boolean))];
     const{data:conceptosPropios}=await sb.from('conceptos_empresa').select('codigo,nombre,tipo,calculo,porcentaje,base_codigo,empresa_id').in('empresa_id',empresaIds);
