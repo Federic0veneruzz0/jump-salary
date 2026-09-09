@@ -4087,13 +4087,26 @@ async function generarListadoEmpleados(){
       return `<tr style="border-bottom:0.5px solid var(--border);">${tds}</tr>`;
     }).join('');
 
+    // Fila de totales — suma cada columna numérica incluida
+    const totBruto=filas.reduce((s,f)=>s+(f.bruto||0),0);
+    const totNoRem=filas.reduce((s,f)=>s+(f.norem||0),0);
+    const totOS=filas.reduce((s,f)=>s+(f.os||0),0);
+    const totNeto=filas.reduce((s,f)=>s+(f.neto||0),0);
+    window._listadoActual.totales={bruto:totBruto,norem:totNoRem,os:totOS,neto:totNeto};
+    let totalesTds=`<td style="padding:6px 8px;" colspan="${1+(mostrarFechaIngreso?1:0)+(mostrarEmpresa?1:0)+1}">TOTAL (${filas.length} empleado${filas.length===1?'':'s'})</td>`;
+    if(incluirBruto)totalesTds+=`<td style="text-align:right;padding:6px 8px;">${mon(totBruto)}</td>`;
+    if(incluirNoRem)totalesTds+=`<td style="text-align:right;padding:6px 8px;">${mon(totNoRem)}</td>`;
+    if(incluirOS)totalesTds+=`<td style="text-align:right;padding:6px 8px;">${mon(totOS)}</td>`;
+    if(incluirNeto)totalesTds+=`<td style="text-align:right;padding:6px 8px;">${mon(totNeto)}</td>`;
+    const totalesHtml=`<tr style="border-top:2px solid var(--navy2);font-weight:700;background:#f2f4f9;">${totalesTds}</tr>`;
+
     document.getElementById('modal-listado-resultado-title').textContent=`Listado de empleados · ${tituloListado}`;
     document.getElementById('modal-listado-resultado-body').innerHTML=`
       <div id="listado-pdf-contenedor" style="background:#fff;padding:14px;">
         <div style="font-size:14px;font-weight:600;color:var(--navy2);margin-bottom:10px;">Listado de empleados — ${tituloListado}</div>
         <table style="width:100%;border-collapse:collapse;font-size:12px;">
           <thead><tr style="border-bottom:2px solid var(--navy2);color:var(--text3);">${cols}</tr></thead>
-          <tbody>${rowsHtml}</tbody>
+          <tbody>${rowsHtml}${totalesHtml}</tbody>
         </table>
       </div>`;
     cerrarModal('modal-listado-config');
@@ -4150,14 +4163,25 @@ async function exportarListadoPDF(){
       return fila;
     });
 
+    // Fila de totales al pie de la tabla
+    const colsFijas=1+(datos.mostrarFechaIngreso?1:0)+(datos.mostrarEmpresa?1:0)+1;
+    const t=datos.totales||{};
+    const footRow=[{content:`TOTAL (${datos.filas.length} empleado${datos.filas.length===1?'':'s'})`,colSpan:colsFijas}];
+    if(datos.incluirBruto)footRow.push(mon(t.bruto||0));
+    if(datos.incluirNoRem)footRow.push(mon(t.norem||0));
+    if(datos.incluirOS)footRow.push(mon(t.os||0));
+    if(datos.incluirNeto)footRow.push(mon(t.neto||0));
+
     pdf.autoTable({
       startY:27,
       margin:{left:marginX,right:marginX},
       head:[head],
       body,
+      foot:[footRow],
       theme:'striped',
       styles:{fontSize:8,cellPadding:2},
       headStyles:{fillColor:[26,46,90],textColor:255,fontStyle:'bold'},
+      footStyles:{fillColor:[242,244,249],textColor:[26,46,90],fontStyle:'bold',lineWidth:{top:0.4}},
       columnStyles:colStyles,
       didDrawPage:(data)=>{
         pdf.setFont('helvetica','normal');pdf.setFontSize(7.5);pdf.setTextColor(150,150,150);
