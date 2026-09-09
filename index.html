@@ -1851,6 +1851,11 @@ async function crearCliente(){
 }
 
 async function cargarRecibosContador(){
+  // Cada vez que esta tabla se recarga (cambio de filtro, de empresa, o
+  // después de una acción como revocar/eliminar) invalidamos la selección:
+  // los checkboxes tildados de una vista anterior quedaban "pegados" en
+  // memoria aunque ya no se vieran, y se colaban en listados/PDFs combinados.
+  limpiarSeleccion();
   const estado=document.getElementById('filtro-estado-rec')?.value;
   const selPeriodo=document.getElementById('filtro-periodo-rec');
   const periodoSeleccionado=selPeriodo?.value||'';
@@ -2228,6 +2233,7 @@ async function initEmpleador(){
 }
 
 async function cargarRecibosEmpleador(){
+  limpiarSeleccion();
   const selPeriodo=document.getElementById('filtro-periodo-emp');
   const periodoSeleccionado=selPeriodo?.value||'';
 
@@ -2777,7 +2783,13 @@ function toggleSeleccionRecibo(reciboId,checked){
 }
 
 function toggleSeleccionarTodos(masterCheckbox){
-  const checks=document.querySelectorAll('.chk-recibo');
+  // OJO: hay más de una tabla en la app que usa la clase .chk-recibo (la del
+  // contador, la del panel de empresa, la de "Mis recibos"). Si buscáramos en
+  // todo el documento, "seleccionar todos" también agarraba checkboxes de
+  // otra tabla que hubiera quedado renderizada (oculta) de antes. Por eso
+  // acotamos la búsqueda a la tabla específica donde está este checkbox.
+  const contenedor=masterCheckbox.closest('table')||document;
+  const checks=contenedor.querySelectorAll('.chk-recibo');
   checks.forEach(c=>{
     c.checked=masterCheckbox.checked;
     const id=c.getAttribute('data-id');
