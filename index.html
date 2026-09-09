@@ -1771,6 +1771,11 @@ async function cargarSelectEmpresas(){
 
 async function cambiarEmpresaActiva(empId){
   empresaActivaId=empId;
+  // Al cambiar de empresa, cualquier recibo tildado de otra empresa quedaba
+  // "pegado" en la selección sin verse (la fila ya no está en la tabla
+  // filtrada), y se colaba en el listado/PDF combinado. Limpiamos siempre.
+  seleccionados.clear();
+  if(typeof actualizarBarraSeleccion==='function')actualizarBarraSeleccion();
   // Sincronizar todos los selectores internos
   ['select-empresa','select-empresa-empl','filtro-empresa-rec','select-empresa-contrib'].forEach(id=>{
     const s=document.getElementById(id);
