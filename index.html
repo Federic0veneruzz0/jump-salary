@@ -2834,6 +2834,36 @@ function _drawBarraTitulo(pdf,titulo,valor,x,y,width){
   return y+h+1.5;
 }
 
+// Dibuja una torta (donut) vectorial aproximando cada porción con un abanico
+// de triángulos — nada de imágenes, así el PDF sigue pesando poco.
+function _drawPieChartPDF(pdf,cx,cy,radius,datos){
+  const total=datos.reduce((s,d)=>s+d.val,0);
+  if(total<=0)return;
+  let startAngle=-Math.PI/2;
+  datos.forEach(d=>{
+    const sliceAngle=(d.val/total)*Math.PI*2;
+    const endAngle=startAngle+sliceAngle;
+    const steps=Math.max(2,Math.ceil(sliceAngle/(Math.PI/60)));
+    const points=[];
+    for(let i=0;i<=steps;i++){
+      const a=startAngle+(sliceAngle*i/steps);
+      points.push([cx+radius*Math.cos(a),cy+radius*Math.sin(a)]);
+    }
+    pdf.setFillColor(d.color[0],d.color[1],d.color[2]);
+    pdf.setDrawColor(255,255,255);
+    pdf.setLineWidth(0.3);
+    let px=cx,py=cy;
+    const deltas=[];
+    deltas.push([points[0][0]-px,points[0][1]-py]);px=points[0][0];py=points[0][1];
+    for(let i=1;i<points.length;i++){
+      deltas.push([points[i][0]-px,points[i][1]-py]);px=points[i][0];py=points[i][1];
+    }
+    deltas.push([cx-px,cy-py]);
+    pdf.lines(deltas,cx,cy,[1,1],'FD',true);
+    startAngle=endAngle;
+  });
+}
+
 function dibujarReciboPDF(pdf,datosRecibo){
   const{r,conceptos,remBase,totales,contrib,totalContrib,costoTotal,emp,empresa,fechaFirma}=datosRecibo;
   const pageWidth=pdf.internal.pageSize.getWidth();
@@ -2964,6 +2994,65 @@ function dibujarReciboPDF(pdf,datosRecibo){
     pdf.setFont('helvetica','normal');pdf.setFontSize(7.5);pdf.setTextColor(60,68,85);
     pdf.text('Este recibo todavía no fue confirmado/firmado por el trabajador.',marginX,y+4.5);
   }
+  y+=11;
+
+  // PANEL INFERIOR: composición salarial (izq.) + gráfico de torta (der.)
+  pdf.setDrawColor(208,216,236);pdf.setLineWidth(0.2);
+  pdf.line(marginX,y,pageWidth-marginX,y);
+  y+=4;
+  const colAnchoComp=(usableWidth-6)/2;
+  const yPanelInicio=y;
+
+  // Columna izquierda: composición salarial (texto)
+  y=_drawBarraTitulo(pdf,'COMPOSICIÓN SALARIAL','',marginX,y,colAnchoComp);
+  const filasComp=[
+    ['Costo total empleador',mon(costoTotal),true],
+    ['Contribuciones patronales',mon(totalContrib),false],
+    ['Sueldo bruto',mon(totales.bruto),false],
+    ['Descuentos trabajador',mon(totales.dedLegal),false],
+  ];
+  filasComp.forEach(([label,valor,destacado])=>{
+    pdf.setFont('helvetica',destacado?'bold':'normal');pdf.setFontSize(7.5);pdf.setTextColor(60,68,85);
+    pdf.text(label,marginX,y+3);
+    pdf.text(valor,marginX+colAnchoComp-1,y+3,{align:'right'});
+    pdf.setDrawColor(230,233,240);pdf.setLineWidth(0.15);
+    pdf.line(marginX,y+4.3,marginX+colAnchoComp-1,y+4.3);
+    y+=5.5;
+  });
+  pdf.setFont('helvetica','bold');pdf.setFontSize(8);pdf.setTextColor(26,46,90);
+  pdf.text('Neto a cobrar',marginX,y+3);
+  pdf.text(mon(r.neto_redondeado||r.neto),marginX+colAnchoComp-1,y+3,{align:'right'});
+  y+=6.5;
+  pdf.setFont('helvetica','italic');pdf.setFontSize(6.5);pdf.setTextColor(150,150,150);
+  pdf.text('Contrib. patronales estimadas — Art. 140 Dto. 407/2026',marginX,y,{maxWidth:colAnchoComp});
+  const yFinIzq=y+4;
+
+  // Columna derecha: gráfico de torta
+  const xDer=marginX+colAnchoComp+6;
+  let yDer=_drawBarraTitulo(pdf,'DISTRIBUCIÓN DE COSTOS','',xDer,yPanelInicio,colAnchoComp);
+  const netoVal=r.neto_redondeado||r.neto;
+  const datosTorta=[
+    {label:'Sueldo Neto',val:netoVal,color:[15,31,61]},
+    {label:'Contribuciones',val:totalContrib,color:[59,111,212]},
+    {label:'Descuentos trab.',val:totales.dedLegal,color:[232,184,75]},
+    {label:'No Remunerativo',val:totales.norem,color:[91,141,232]},
+  ].filter(d=>d.val>0);
+  const totalTorta=datosTorta.reduce((s,d)=>s+d.val,0);
+  datosTorta.forEach(d=>d.pct=Math.round(d.val*1000/totalTorta)/10);
+  const radioTorta=13;
+  const cxTorta=xDer+colAnchoComp/2;
+  const cyTorta=yDer+radioTorta+2;
+  _drawPieChartPDF(pdf,cxTorta,cyTorta,radioTorta,datosTorta);
+  let yLeyenda=cyTorta+radioTorta+5;
+  datosTorta.forEach(d=>{
+    pdf.setFillColor(d.color[0],d.color[1],d.color[2]);
+    pdf.rect(xDer+8,yLeyenda-2.4,3,3,'F');
+    pdf.setFont('helvetica','normal');pdf.setFontSize(7);pdf.setTextColor(60,68,85);
+    pdf.text(d.label,xDer+13,yLeyenda);
+    pdf.setFont('helvetica','bold');
+    pdf.text(`${d.pct}%`,xDer+colAnchoComp-1,yLeyenda,{align:'right'});
+    yLeyenda+=4.3;
+  });
 }
 
 async function generarPDFMultiple(){
