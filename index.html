@@ -652,6 +652,9 @@ tr:last-child td{border-bottom:none;}
         <input type="checkbox" id="chk-listado-bruto" checked style="width:16px;height:16px;flex-shrink:0;margin:0;padding:0;"> Bruto
       </label>
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:400;text-transform:none;letter-spacing:normal;color:var(--text);cursor:pointer;">
+        <input type="checkbox" id="chk-listado-rem" style="width:16px;height:16px;flex-shrink:0;margin:0;padding:0;"> Remunerativo
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:400;text-transform:none;letter-spacing:normal;color:var(--text);cursor:pointer;">
         <input type="checkbox" id="chk-listado-norem" style="width:16px;height:16px;flex-shrink:0;margin:0;padding:0;"> No Remunerativo
       </label>
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:400;text-transform:none;letter-spacing:normal;color:var(--text);cursor:pointer;">
@@ -4003,6 +4006,7 @@ async function abrirModalListado(desdeSeleccion){
 
 async function generarListadoEmpleados(){
   const incluirBruto=document.getElementById('chk-listado-bruto')?.checked;
+  const incluirRem=document.getElementById('chk-listado-rem')?.checked;
   const incluirNoRem=document.getElementById('chk-listado-norem')?.checked;
   const incluirOS=document.getElementById('chk-listado-os')?.checked;
   const incluirNeto=document.getElementById('chk-listado-neto')?.checked;
@@ -4064,6 +4068,7 @@ async function generarListadoEmpleados(){
         fechaIngreso:r.empleados?.fecha_ingreso||null,
         empresa:r.empresas?.nombre||'',
         bruto:totalesFila.bruto,
+        rem:totalesFila.rem,
         norem:totalesFila.norem,
         os:calcularAporteOS(conceptos),
         neto:r.neto_redondeado||r.neto||0,
@@ -4091,7 +4096,7 @@ async function generarListadoEmpleados(){
       filas,
       mostrarFechaIngreso,
       mostrarEmpresa,
-      incluirBruto,incluirNoRem,incluirOS,incluirNeto,
+      incluirBruto,incluirRem,incluirNoRem,incluirOS,incluirNeto,
     };
     if(!mostrarEmpresa&&empresaIdParaLegajo()){
       const{data:empresaData}=await sb.from('empresas').select('nombre').eq('id',empresaIdParaLegajo()).maybeSingle();
@@ -4102,6 +4107,7 @@ async function generarListadoEmpleados(){
     if(mostrarFechaIngreso)cols+='<th style="text-align:left;padding:6px 8px;">Fecha Ingreso</th>';
     if(mostrarEmpresa)cols+='<th style="text-align:left;padding:6px 8px;">Empresa</th>';
     if(incluirBruto)cols+='<th style="text-align:right;padding:6px 8px;">Bruto</th>';
+    if(incluirRem)cols+='<th style="text-align:right;padding:6px 8px;">Remunerativo</th>';
     if(incluirNoRem)cols+='<th style="text-align:right;padding:6px 8px;">No Remunerativo</th>';
     if(incluirOS)cols+='<th style="text-align:right;padding:6px 8px;">Aporte OS</th>';
     if(incluirNeto)cols+='<th style="text-align:right;padding:6px 8px;">Neto</th>';
@@ -4111,6 +4117,7 @@ async function generarListadoEmpleados(){
       if(mostrarFechaIngreso)tds+=`<td style="padding:5px 8px;">${f.fechaIngreso||'—'}</td>`;
       if(mostrarEmpresa)tds+=`<td style="padding:5px 8px;">${f.empresa}</td>`;
       if(incluirBruto)tds+=`<td style="text-align:right;padding:5px 8px;">${mon(f.bruto)}</td>`;
+      if(incluirRem)tds+=`<td style="text-align:right;padding:5px 8px;">${mon(f.rem)}</td>`;
       if(incluirNoRem)tds+=`<td style="text-align:right;padding:5px 8px;">${mon(f.norem)}</td>`;
       if(incluirOS)tds+=`<td style="text-align:right;padding:5px 8px;">${mon(f.os)}</td>`;
       if(incluirNeto)tds+=`<td style="text-align:right;padding:5px 8px;">${mon(f.neto)}</td>`;
@@ -4119,12 +4126,14 @@ async function generarListadoEmpleados(){
 
     // Fila de totales — suma cada columna numérica incluida
     const totBruto=filas.reduce((s,f)=>s+(f.bruto||0),0);
+    const totRem=filas.reduce((s,f)=>s+(f.rem||0),0);
     const totNoRem=filas.reduce((s,f)=>s+(f.norem||0),0);
     const totOS=filas.reduce((s,f)=>s+(f.os||0),0);
     const totNeto=filas.reduce((s,f)=>s+(f.neto||0),0);
-    window._listadoActual.totales={bruto:totBruto,norem:totNoRem,os:totOS,neto:totNeto};
+    window._listadoActual.totales={bruto:totBruto,rem:totRem,norem:totNoRem,os:totOS,neto:totNeto};
     let totalesTds=`<td style="padding:6px 8px;" colspan="${1+(mostrarFechaIngreso?1:0)+(mostrarEmpresa?1:0)+1}">TOTAL (${filas.length} empleado${filas.length===1?'':'s'})</td>`;
     if(incluirBruto)totalesTds+=`<td style="text-align:right;padding:6px 8px;">${mon(totBruto)}</td>`;
+    if(incluirRem)totalesTds+=`<td style="text-align:right;padding:6px 8px;">${mon(totRem)}</td>`;
     if(incluirNoRem)totalesTds+=`<td style="text-align:right;padding:6px 8px;">${mon(totNoRem)}</td>`;
     if(incluirOS)totalesTds+=`<td style="text-align:right;padding:6px 8px;">${mon(totOS)}</td>`;
     if(incluirNeto)totalesTds+=`<td style="text-align:right;padding:6px 8px;">${mon(totNeto)}</td>`;
@@ -4178,6 +4187,7 @@ async function exportarListadoPDF(){
     if(datos.mostrarFechaIngreso){head.push('Fecha Ingreso');idx++;}
     if(datos.mostrarEmpresa){head.push('Empresa');idx++;}
     if(datos.incluirBruto){head.push('Bruto');colStyles[head.length-1]={halign:'right'};}
+    if(datos.incluirRem){head.push('Remunerativo');colStyles[head.length-1]={halign:'right'};}
     if(datos.incluirNoRem){head.push('No Remunerativo');colStyles[head.length-1]={halign:'right'};}
     if(datos.incluirOS){head.push('Aporte OS');colStyles[head.length-1]={halign:'right'};}
     if(datos.incluirNeto){head.push('Neto');colStyles[head.length-1]={halign:'right'};}
@@ -4187,6 +4197,7 @@ async function exportarListadoPDF(){
       if(datos.mostrarFechaIngreso)fila.push(f.fechaIngreso||'—');
       if(datos.mostrarEmpresa)fila.push(f.empresa);
       if(datos.incluirBruto)fila.push(mon(f.bruto));
+      if(datos.incluirRem)fila.push(mon(f.rem));
       if(datos.incluirNoRem)fila.push(mon(f.norem));
       if(datos.incluirOS)fila.push(mon(f.os));
       if(datos.incluirNeto)fila.push(mon(f.neto));
@@ -4198,6 +4209,7 @@ async function exportarListadoPDF(){
     const t=datos.totales||{};
     const footRow=[{content:`TOTAL (${datos.filas.length} empleado${datos.filas.length===1?'':'s'})`,colSpan:colsFijas}];
     if(datos.incluirBruto)footRow.push(mon(t.bruto||0));
+    if(datos.incluirRem)footRow.push(mon(t.rem||0));
     if(datos.incluirNoRem)footRow.push(mon(t.norem||0));
     if(datos.incluirOS)footRow.push(mon(t.os||0));
     if(datos.incluirNeto)footRow.push(mon(t.neto||0));
