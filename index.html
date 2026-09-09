@@ -367,6 +367,7 @@ tr:last-child td{border-bottom:none;}
       <div class="page" id="page-empleados">
         <div class="page-title">Empleados</div>
         <div class="page-sub">Alta masiva desde archivo ARCA o gestión individual</div>
+        <div id="empleados-empresa-confirmacion" style="font-size:13px;font-weight:600;color:var(--navy2);margin:-8px 0 14px;"></div>
         <div class="card">
           <div class="card-title">Importar desde ARCA</div>
           <div class="upload-zone" id="dz-arca" onclick="document.getElementById('fi-arca').click()">
@@ -2021,6 +2022,16 @@ function cambiarVistaEmpleadosEmpleador(vista){
 }
 
 async function cargarTablaEmpleados(empId){
+  // Chequeo de seguridad: mostramos siempre el nombre REAL de la empresa que
+  // se está consultando, buscado fresco por su id — nunca el texto que haya
+  // quedado puesto en el desplegable. Así, si alguna vez el id activo queda
+  // desincronizado del selector visual, se nota al toque en vez de mostrar
+  // en silencio los empleados de otra empresa.
+  const cajaConfirm=document.getElementById('empleados-empresa-confirmacion');
+  if(cajaConfirm){
+    const{data:empresaReal}=await sb.from('empresas').select('nombre').eq('id',empId).maybeSingle();
+    cajaConfirm.textContent=empresaReal?.nombre?`Mostrando empleados de: ${empresaReal.nombre}`:'⚠️ No se encontró la empresa seleccionada';
+  }
   let q=sb.from('empleados').select('*').eq('empresa_id',empId).order('nombre');
   q=q.eq('activo',_vistaEmpleadosContador==='activos');
   const{data:empleados}=await q;
