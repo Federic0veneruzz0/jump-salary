@@ -1536,6 +1536,7 @@ async function impersonarEstudio(estudioId, estudioNombre){
   // Mostrar selector de empresa en topbar
   document.getElementById('topbar-empresa-selector').style.display='block';
   empresaActivaId=null;
+  limpiarSeleccion();
 
   // Mostrar botón de volver
   document.getElementById('btn-volver-admin').style.display='inline-block';
@@ -1558,6 +1559,7 @@ async function volverAdminPlataforma(){
   // Ocultar selector de empresa
   document.getElementById('topbar-empresa-selector').style.display='none';
   empresaActivaId=null;
+  limpiarSeleccion();
 
   // Ocultar botón de volver y restaurar topbar
   document.getElementById('btn-volver-admin').style.display='none';
@@ -1774,8 +1776,7 @@ async function cambiarEmpresaActiva(empId){
   // Al cambiar de empresa, cualquier recibo tildado de otra empresa quedaba
   // "pegado" en la selección sin verse (la fila ya no está en la tabla
   // filtrada), y se colaba en el listado/PDF combinado. Limpiamos siempre.
-  seleccionados.clear();
-  if(typeof actualizarBarraSeleccion==='function')actualizarBarraSeleccion();
+  limpiarSeleccion();
   // Sincronizar todos los selectores internos
   ['select-empresa','select-empresa-empl','filtro-empresa-rec','select-empresa-contrib'].forEach(id=>{
     const s=document.getElementById(id);
@@ -4312,6 +4313,9 @@ async function verEmpresa(empId){
   const sel=document.getElementById('select-empresa-activa');
   if(sel) sel.value=empId;
   empresaActivaId=empId;
+  // Mismo motivo que en cambiarEmpresaActiva: no dejar recibos tildados de
+  // otra empresa pegados en la selección al saltar de cliente en cliente.
+  limpiarSeleccion();
   ['select-empresa','select-empresa-empl','filtro-empresa-rec','select-empresa-contrib'].forEach(id=>{
     const s=document.getElementById(id);
     if(s) s.value=empId;
