@@ -2707,17 +2707,27 @@ async function cargarRecibosEmpleado(){
 
   const{data:empData}=await sb.from('empleados').select('*').eq('id',currentUser.empleado_id).single();
 
-  const{data:periodosData}=await sb.from('recibos').select('periodo').eq('empleado_id',currentUser.empleado_id).eq('estado','publicado');
+  // La misma persona (mismo CUIL) puede tener una fila de "empleados" por
+  // cada empresa donde trabaja — su cuenta de acceso solo queda enganchada a
+  // una. Buscamos todas las que comparten su CUIL para no perder recibos de
+  // las demás empresas.
+  const{data:empleadosMismoCuil}=await sb.from('empleados').select('id,empresa_id,empresas(nombre)').eq('cuil',empData.cuil);
+  const idsEmpleado=empleadosMismoCuil?.length?empleadosMismoCuil.map(e=>e.id):[currentUser.empleado_id];
+  const mapEmpresaPorEmpleado={};
+  empleadosMismoCuil?.forEach(e=>mapEmpresaPorEmpleado[e.id]=e.empresas?.nombre||'');
+  const mostrarEmpresa=new Set(Object.values(mapEmpresaPorEmpleado)).size>1;
+
+  const{data:periodosData}=await sb.from('recibos').select('periodo').in('empleado_id',idsEmpleado).eq('estado','publicado');
   const periodosDisponibles=[...new Set((periodosData||[]).map(p=>p.periodo).filter(Boolean))].sort((a,b)=>b.localeCompare(a));
   if(selPeriodo){
     selPeriodo.innerHTML='<option value="">Todos los períodos</option>'+periodosDisponibles.map(p=>`<option value="${p}">${parseMes(p)}</option>`).join('');
     if(periodosDisponibles.includes(periodoSeleccionado)) selPeriodo.value=periodoSeleccionado;
   }
 
-  let q=sb.from('recibos').select('*').eq('empleado_id',currentUser.empleado_id).eq('estado','publicado').order('created_at',{ascending:false});
+  let q=sb.from('recibos').select('*').in('empleado_id',idsEmpleado).eq('estado','publicado').order('created_at',{ascending:false});
   if(periodoSeleccionado&&periodosDisponibles.includes(periodoSeleccionado))q=q.eq('periodo',periodoSeleccionado);
   const{data:recibos}=await q;
-  const{data:constancias}=await sb.from('constancias').select('recibo_id').eq('empleado_id',currentUser.empleado_id);
+  const{data:constancias}=recibos?.length?await sb.from('constancias').select('recibo_id').in('recibo_id',recibos.map(r=>r.id)):{data:[]};
   const firmadosIds=new Set(constancias?.map(c=>c.recibo_id)||[]);
 
   if(!recibos?.length){document.getElementById('lista-recibos-empleado').innerHTML=`<div class="empty"><div class="empty-icon">📭</div><div class="empty-title">Sin recibos disponibles</div><div class="empty-sub">Cuando tu empleador apruebe tus recibos van a aparecer acá.</div></div>`;return;}
@@ -2725,12 +2735,13 @@ async function cargarRecibosEmpleado(){
   let html='<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;color:var(--text2);"><input type="checkbox" class="chk-todos" onchange="toggleSeleccionarTodos(this)" title="Seleccionar todos los firmados"> Seleccionar todos los firmados</div><div style="display:flex;flex-direction:column;gap:10px;">';
   recibos.forEach(r=>{
     const firmado=firmadosIds.has(r.id);
+    const empresaTexto=mostrarEmpresa?` <span style="color:var(--text3);font-weight:400;">· ${mapEmpresaPorEmpleado[r.empleado_id]||''}</span>`:'';
     html+=`
     <div class="card" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0;">
       <div style="display:flex;align-items:center;gap:12px;cursor:pointer;" onclick="verReciboEmpleado('${r.id}')">
         ${firmado?`<input type="checkbox" class="chk-recibo" data-id="${r.id}" ${seleccionados.has(r.id)?'checked':''} onclick="event.stopPropagation();" onchange="toggleSeleccionRecibo('${r.id}',this.checked)" title="Seleccionar para descarga combinada">`:'<span style="width:16px;"></span>'}
         <div>
-          <div style="font-size:14px;font-weight:600;color:var(--navy);">${parseMes(r.periodo)} · ${r.tipo}</div>
+          <div style="font-size:14px;font-weight:600;color:var(--navy);">${parseMes(r.periodo)} · ${r.tipo}${empresaTexto}</div>
           <div style="font-size:12px;color:var(--text2);margin-top:2px;">Neto: ${mon(r.neto_redondeado||r.neto)}</div>
         </div>
       </div>
@@ -2749,7 +2760,11 @@ async function cargarRecibosEmpleado(){
 async function verReciboEmpleado(reciboId){
   await verRecibo(reciboId);
   // Sobrescribir las acciones del modal para mostrar Confirmar recepción en vez de Aprobar
-  const{data:constancia,error:errConst}=await sb.from('constancias').select('id,fecha_firma').eq('recibo_id',reciboId).eq('empleado_id',currentUser.empleado_id).order('fecha_firma',{ascending:false}).limit(1).maybeSingle();
+  // El chequeo es por recibo_id únicamente: esta cuenta puede tener recibos
+  // de más de una empresa (mismo CUIL, distinta fila de "empleados"), así
+  // que filtrar también por currentUser.empleado_id excluía los firmados de
+  // la otra empresa.
+  const{data:constancia,error:errConst}=await sb.from('constancias').select('id,fecha_firma').eq('recibo_id',reciboId).order('fecha_firma',{ascending:false}).limit(1).maybeSingle();
   if(errConst) console.error('Error consultando constancia:',errConst);
   const actions=document.getElementById('modal-recibo-actions');
   if(constancia){
@@ -2770,7 +2785,11 @@ function iniciarFirma(reciboId){
 async function confirmarFirma(){
   if(!reciboAFirmar)return;
   const reciboId=reciboAFirmar;
-  await sb.from('constancias').insert({recibo_id:reciboId,empleado_id:currentUser.empleado_id,ip:'registrada',user_agent:navigator.userAgent});
+  // Usamos el empleado_id real del recibo (no el de la cuenta logueada):
+  // si esta persona trabaja en más de una empresa, cada recibo pertenece a
+  // una fila de "empleados" distinta.
+  const{data:reciboInfo}=await sb.from('recibos').select('empleado_id').eq('id',reciboId).single();
+  await sb.from('constancias').insert({recibo_id:reciboId,empleado_id:reciboInfo?.empleado_id||currentUser.empleado_id,ip:'registrada',user_agent:navigator.userAgent});
   cerrarModal('modal-firmar');
   reciboAFirmar=null;
   await cargarRecibosEmpleado();
