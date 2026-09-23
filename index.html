@@ -414,6 +414,11 @@ tr:last-child td{border-bottom:none;}
               <select id="filtro-tipo-rec" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" onchange="cargarRecibosContador()">
                 <option value="">Todos los tipos</option>
               </select>
+              <select id="filtro-firma-rec" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" onchange="cargarRecibosContador()">
+                <option value="">Firmado y pendiente</option>
+                <option value="firmado">Solo firmados</option>
+                <option value="pendiente">Solo pendientes</option>
+              </select>
               <button class="btn-sm btn-outline" onclick="abrirModalListado(false)">📋 Generar listado</button>
             </div>
           </div>
@@ -1908,9 +1913,17 @@ async function cargarRecibosContador(){
   constancias?.forEach(c=>{firmaPorRecibo[c.recibo_id]=c.fecha_firma;});
   const puedeEliminarRecibos=currentUser.es_admin===true||currentUser.es_admin==='true'||adminOriginal!==null;
 
-  if(!recibos?.length){document.getElementById('tabla-recibos-contador').innerHTML=`<div class="empty"><div class="empty-icon">📄</div><div class="empty-title">Sin recibos</div></div>`;return;}
+  // Firmado/pendiente no es una columna de "recibos" (sale de cruzar con
+  // "constancias"), así que este filtro se aplica en el cliente, después de
+  // armar firmaPorRecibo. Solo tiene sentido sobre recibos publicados.
+  const filtroFirma=document.getElementById('filtro-firma-rec')?.value;
+  const recibosVisibles=filtroFirma
+    ?recibos.filter(r=>r.estado==='publicado'&&(filtroFirma==='firmado'?!!firmaPorRecibo[r.id]:!firmaPorRecibo[r.id]))
+    :recibos;
+
+  if(!recibosVisibles?.length){document.getElementById('tabla-recibos-contador').innerHTML=`<div class="empty"><div class="empty-icon">📄</div><div class="empty-title">Sin recibos</div></div>`;return;}
   let html=`<div class="card"><table><thead><tr><th><input type="checkbox" class="chk-todos" onchange="toggleSeleccionarTodos(this)" title="Seleccionar todos"></th><th>Empleado</th><th>Empresa</th><th>Período</th><th>Tipo</th><th>Neto</th><th>Estado</th><th>Firma</th><th></th></tr></thead><tbody>`;
-  recibos.forEach(r=>{
+  recibosVisibles.forEach(r=>{
     const badgeClass={borrador:'badge-borrador',publicado:'badge-publicado',revocado:'badge-revocado',rechazado:'badge-rechazado'}[r.estado]||'badge-borrador';
     const firmadoOk=r.estado==='publicado'&&!!firmaPorRecibo[r.id];
     let firmaHtml='—';
