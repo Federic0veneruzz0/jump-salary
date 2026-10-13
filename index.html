@@ -340,6 +340,14 @@ tr:last-child td{border-bottom:none;}
           <div style="border-bottom:1px solid var(--border);margin:10px 0 14px;"></div>
           <div id="tabla-empresas"><div class="loading">Cargando...</div></div>
         </div>
+        <div class="card" id="card-empresas-baja" style="display:none;margin-top:16px;">
+          <div class="card-title" style="border-bottom:none;margin-bottom:0;padding-bottom:0;">
+            <span>Clientes dados de baja</span>
+          </div>
+          <div style="font-size:12px;color:var(--text3);margin:4px 0 0;">Sus empleados siguen pudiendo entrar a ver y firmar los recibos ya publicados. No aparecen en tus listas ni en el selector de empresas.</div>
+          <div style="border-bottom:1px solid var(--border);margin:10px 0 14px;"></div>
+          <div id="tabla-empresas-baja"></div>
+        </div>
       </div>
 
       <div class="page" id="page-subir">
@@ -1147,15 +1155,17 @@ async function doLogin(){
   const pass=document.getElementById('login-pass').value;
   if(!cuit||!pass){showErr('login-err','Completá todos los campos.');return;}
 
-  // Buscar usuario en nuestra tabla
-  const{data:usuario,error}=await sb.from('usuarios').select('*').eq('cuit_cuil',cuit).single();
+  // Buscar usuario vía RPC (no lee la tabla usuarios directo — ver login_lookup
+  // en Supabase, parte del endurecimiento de seguridad con RLS).
+  const{data:loginData,error}=await sb.rpc('login_lookup',{p_cuit:cuit});
+  const usuario=loginData?.[0];
   if(error||!usuario){showErr('login-err','CUIT/CUIL no encontrado en el sistema.');return;}
 
   // Si es primer acceso, la clave es el DNI (8 dígitos del medio del CUIL)
   const dniEsperado=cuit.slice(2,10);
   if(usuario.primer_acceso){
     if(pass!==dniEsperado){showErr('login-err','Contraseña incorrecta. En tu primer acceso, la contraseña son los 8 números del medio de tu CUIT/CUIL (tu DNI, si sos empleado).');return;}
-    currentUser=usuario;
+    currentUser={id:usuario.id,cuit_cuil:cuit,primer_acceso:true};
     document.getElementById('login-step-1').style.display='none';
     document.getElementById('login-step-primer').style.display='block';
     return;
@@ -1179,7 +1189,9 @@ async function doLogin(){
     showErr('login-err','Contraseña incorrecta. Si es tu primer acceso usá los 8 números del medio de tu CUIT/CUIL.');
     return;
   }
-  currentUser=usuario;
+  // Ya autenticado: ahora sí podemos leer la fila completa (con sesión activa).
+  const{data:usuarioCompleto}=await sb.from('usuarios').select('*').eq('cuit_cuil',cuit).single();
+  currentUser=usuarioCompleto;
   iniciarApp();
 }
 
@@ -1200,28 +1212,35 @@ async function doPrimerAcceso(){
   if(!emailInput.includes('@')){showErr('primer-err','Email inválido.');return;}
 
   const email=emailInput;
+  const cuit=currentUser.cuit_cuil;
+  const dniConfirmado=cuit.slice(2,10);
 
   // Crear usuario en Supabase Auth
   const{data,error}=await sb.auth.signUp({email,password:pass});
   if(error){showErr('primer-err','Error al crear cuenta: '+error.message);return;}
 
-  // Actualizar tabla usuarios
-  await sb.from('usuarios').update({
-    email,
-    primer_acceso:false,
-    auth_id:data.user?.id
-  }).eq('id',currentUser.id);
-
-  // Ingresar directamente sin esperar verificación de email
-  const{error:loginErr}=await sb.auth.signInWithPassword({email,password:pass});
-  if(loginErr){
-    // Si Supabase requiere verificación, igual dejamos entrar vía nuestra tabla
-    currentUser={...currentUser,email,primer_acceso:false};
-    iniciarApp();
+  // Asegurar que haya sesión activa antes de reclamar la cuenta — signUp no
+  // siempre deja logueado (depende de si Supabase pide confirmar el email).
+  let sesionActiva=!!data.session;
+  if(!sesionActiva){
+    const{error:loginErr}=await sb.auth.signInWithPassword({email,password:pass});
+    sesionActiva=!loginErr;
+  }
+  if(!sesionActiva){
+    showErr('primer-err','Creamos tu cuenta, pero tu proveedor de email requiere que confirmes el correo antes de poder entrar. Revisá tu casilla ('+email+') y volvé a intentar el login después.');
     return;
   }
 
-  currentUser={...currentUser,email,primer_acceso:false};
+  // "Reclamar" la fila de usuarios: la función revalida el DNI del lado del
+  // servidor (no solo en el navegador) antes de vincular la cuenta.
+  const{error:errReclamo}=await sb.rpc('reclamar_cuenta',{p_usuario_id:currentUser.id,p_cuit:cuit,p_dni:dniConfirmado});
+  if(errReclamo){showErr('primer-err','No se pudo activar la cuenta: '+errReclamo.message);return;}
+  await sb.from('usuarios').update({email,primer_acceso:false}).eq('id',currentUser.id);
+
+  // Traer la fila completa ahora que estamos logueados — en el paso anterior
+  // (login_lookup) currentUser solo tenía id/cuit_cuil, sin tipo/estudio/empresa.
+  const{data:usuarioCompleto}=await sb.from('usuarios').select('*').eq('id',currentUser.id).maybeSingle();
+  currentUser=usuarioCompleto||{...currentUser,email,primer_acceso:false};
   alert('¡Listo! Ya podés usar la app. Te recomendamos verificar tu email ('+email+') para poder recuperar tu contraseña si la olvidás.');
   iniciarApp();
 }
@@ -1248,7 +1267,8 @@ async function enviarRecuperacion(){
   const cuit=nc(document.getElementById('recuperar-cuit').value);
   if(!cuit){errBox.textContent='Ingresá tu CUIT/CUIL.';errBox.style.display='block';return;}
 
-  const{data:usuario}=await sb.from('usuarios').select('email,primer_acceso').eq('cuit_cuil',cuit).maybeSingle();
+  const{data:recData}=await sb.rpc('recuperar_lookup',{p_cuit:cuit});
+  const usuario=recData?.[0];
   if(!usuario){errBox.textContent='CUIT/CUIL no encontrado en el sistema.';errBox.style.display='block';return;}
   if(usuario.primer_acceso||!usuario.email){
     errBox.textContent='Todavía no creaste tu contraseña. Ingresá con tu CUIT/CUIL y los 8 números del medio como contraseña (tu DNI, si sos empleado) para crearla.';
@@ -1738,6 +1758,8 @@ async function cargarDashboardContador(){
   document.getElementById('st-firmados').textContent=firmados?.length||0;
   document.getElementById('st-pendientes').textContent=publicados?.length||0;
 
+  await cargarEmpresasDeBaja();
+
   if(!empresas?.length){
     document.getElementById('tabla-empresas').innerHTML=`<div class="empty"><div class="empty-icon">🏢</div><div class="empty-title">Sin empresas todavía</div><div class="empty-sub">Hacé clic en "+ Nuevo cliente" para agregar el primero.</div></div>`;
     return;
@@ -1745,10 +1767,50 @@ async function cargarDashboardContador(){
   let html=`<table><thead><tr><th>Empresa</th><th>CUIT</th><th>Empleados</th><th></th></tr></thead><tbody>`;
   for(const e of empresas){
     const{count}=await sb.from('empleados').select('id',{count:'exact'}).eq('empresa_id',e.id).eq('activo',true);
-    html+=`<tr><td><strong>${e.nombre}</strong></td><td>${fc(e.cuit)}</td><td>${count||0}</td><td><button class="btn-sm btn-outline" onclick="verEmpresa('${e.id}')">Ver recibos</button></td></tr>`;
+    const nombreEsc=(e.nombre||'').replace(/'/g,"\\'");
+    html+=`<tr><td><strong>${e.nombre}</strong></td><td>${fc(e.cuit)}</td><td>${count||0}</td><td style="white-space:nowrap;text-align:right;"><button class="btn-sm btn-outline" style="margin-right:5px;" onclick="verEmpresa('${e.id}')">Ver recibos</button><button class="btn-sm btn-outline" onclick="darDeBajaEmpresa('${e.id}','${nombreEsc}')">Dar de baja</button></td></tr>`;
   }
   html+=`</tbody></table>`;
   document.getElementById('tabla-empresas').innerHTML=html;
+}
+
+// Lista de clientes dados de baja (empresas.activa = false) del estudio.
+async function cargarEmpresasDeBaja(){
+  const card=document.getElementById('card-empresas-baja');
+  const cont=document.getElementById('tabla-empresas-baja');
+  if(!card||!cont||!currentUser?.estudio_id)return;
+  const{data:bajas}=await sb.from('empresas').select('id,nombre,cuit').eq('activa',false).eq('estudio_id',currentUser.estudio_id).order('nombre');
+  if(!bajas?.length){card.style.display='none';cont.innerHTML='';return;}
+  card.style.display='block';
+  let html=`<table><thead><tr><th>Empresa</th><th>CUIT</th><th></th></tr></thead><tbody>`;
+  bajas.forEach(e=>{
+    const nombreEsc=(e.nombre||'').replace(/'/g,"\\'");
+    html+=`<tr><td><strong>${e.nombre}</strong></td><td>${fc(e.cuit)}</td><td style="text-align:right;"><button class="btn-sm btn-outline" onclick="reactivarEmpresa('${e.id}','${nombreEsc}')">Reactivar</button></td></tr>`;
+  });
+  html+=`</tbody></table>`;
+  cont.innerHTML=html;
+}
+
+async function darDeBajaEmpresa(empId,nombre){
+  const ok=confirm(`¿Dar de baja a "${nombre}"?\n\n• Deja de aparecer en tu panel, en el selector de empresas y en Recibos.\n• Sus empleados y su empresa pueden seguir entrando a ver y firmar los recibos ya publicados.\n• Podés reactivarla cuando quieras desde "Clientes dados de baja".\n\nSi necesitás bajar PDFs o listados de este cliente, hacelo antes.`);
+  if(!ok)return;
+  const{data,error}=await sb.from('empresas').update({activa:false}).eq('id',empId).select('id');
+  if(error){alert('No se pudo dar de baja: '+error.message);return;}
+  if(!data?.length){alert('No se pudo dar de baja (sin permiso para modificar esta empresa). Revisá que esté creada la política empresas_update en Supabase.');return;}
+  if(empresaActivaId===empId){empresaActivaId=null;limpiarSeleccion();}
+  showToast('🗂️ Cliente dado de baja.');
+  await cargarSelectEmpresas();
+  await cargarDashboardContador();
+}
+
+async function reactivarEmpresa(empId,nombre){
+  if(!confirm(`¿Reactivar a "${nombre}"? Vuelve a aparecer en tu panel y en el selector de empresas.`))return;
+  const{data,error}=await sb.from('empresas').update({activa:true}).eq('id',empId).select('id');
+  if(error){alert('No se pudo reactivar: '+error.message);return;}
+  if(!data?.length){alert('No se pudo reactivar (sin permiso para modificar esta empresa).');return;}
+  showToast('✅ Cliente reactivado.');
+  await cargarSelectEmpresas();
+  await cargarDashboardContador();
 }
 
 async function cargarSelectEmpresas(){
@@ -2718,17 +2780,36 @@ async function cargarRecibosEmpleado(){
   const selPeriodo=document.getElementById('filtro-periodo-empdo');
   const periodoSeleccionado=selPeriodo?.value||'';
 
-  const{data:empData}=await sb.from('empleados').select('*').eq('id',currentUser.empleado_id).single();
+  // Preferimos ubicar el CUIL a través de empleado_id, pero si esa cuenta
+  // quedó sin vincular a una fila de "empleados" (dato viejo), recurrimos al
+  // CUIL guardado en la propia cuenta como respaldo — así no rompemos la
+  // pantalla en vez de mostrar un mensaje claro.
+  let cuil=null;
+  if(currentUser.empleado_id){
+    const{data:empData}=await sb.from('empleados').select('cuil').eq('id',currentUser.empleado_id).maybeSingle();
+    cuil=empData?.cuil||null;
+  }
+  if(!cuil) cuil=currentUser.cuit_cuil||null;
+
+  if(!cuil){
+    document.getElementById('lista-recibos-empleado').innerHTML=`<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">No pudimos encontrar tu legajo</div><div class="empty-sub">Contactá a tu estudio contable para que revise tu cuenta.</div></div>`;
+    return;
+  }
 
   // La misma persona (mismo CUIL) puede tener una fila de "empleados" por
   // cada empresa donde trabaja — su cuenta de acceso solo queda enganchada a
   // una. Buscamos todas las que comparten su CUIL para no perder recibos de
   // las demás empresas.
-  const{data:empleadosMismoCuil}=await sb.from('empleados').select('id,empresa_id,empresas(nombre)').eq('cuil',empData.cuil);
-  const idsEmpleado=empleadosMismoCuil?.length?empleadosMismoCuil.map(e=>e.id):[currentUser.empleado_id];
+  const{data:empleadosMismoCuil}=await sb.from('empleados').select('id,empresa_id,empresas(nombre)').eq('cuil',cuil);
+  const idsEmpleado=empleadosMismoCuil?.length?empleadosMismoCuil.map(e=>e.id):(currentUser.empleado_id?[currentUser.empleado_id]:[]);
   const mapEmpresaPorEmpleado={};
   empleadosMismoCuil?.forEach(e=>mapEmpresaPorEmpleado[e.id]=e.empresas?.nombre||'');
   const mostrarEmpresa=new Set(Object.values(mapEmpresaPorEmpleado)).size>1;
+
+  if(!idsEmpleado.length){
+    document.getElementById('lista-recibos-empleado').innerHTML=`<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">No encontramos ningún legajo con tu CUIL</div><div class="empty-sub">Contactá a tu estudio contable para que revise tu cuenta.</div></div>`;
+    return;
+  }
 
   const{data:periodosData}=await sb.from('recibos').select('periodo').in('empleado_id',idsEmpleado).eq('estado','publicado');
   const periodosDisponibles=[...new Set((periodosData||[]).map(p=>p.periodo).filter(Boolean))].sort((a,b)=>b.localeCompare(a));
