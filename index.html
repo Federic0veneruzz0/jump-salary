@@ -798,14 +798,15 @@ tr:last-child td{border-bottom:none;}
         <div class="field" style="margin-bottom:0;">
           <label>Obra Social</label>
           <div style="display:flex;gap:6px;">
-            <input type="text" id="legajo-os" list="datalist-obras-sociales" placeholder="Ej: OSDE, OSPE, Swiss Medical..." style="flex:1;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" oninput="document.getElementById('legajo-os-hint').textContent=''">
+            <input type="text" id="legajo-os" list="datalist-obras-sociales" placeholder="Ej: OSDE, OSPE, Swiss Medical..." style="flex:1;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" oninput="document.getElementById('legajo-os-hint').textContent='';actualizarBaseOSSugerida()" onchange="normalizarObraSocialLegajo()">
             <button type="button" class="btn-sm btn-outline" style="white-space:nowrap;" title="Agregar una obra social nueva al catálogo" onclick="agregarObraSocialDesdeLegajo()">+ Nueva</button>
           </div>
           <div id="legajo-os-hint" style="font-size:11px;color:var(--danger);margin-top:3px;"></div>
         </div>
         <div class="field" style="margin-bottom:0;">
           <label>Base jornada completa <span style="font-weight:400;color:var(--text3);font-size:11px;">(solo media jornada)</span></label>
-          <input type="text" inputmode="decimal" id="legajo-base-os" placeholder="dejar vacío si aporta sobre su básico real" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;text-align:right;" onfocus="this.select()" onblur="onBlurMontoInput(this)">
+          <input type="text" inputmode="decimal" id="legajo-base-os" placeholder="dejar vacío si aporta sobre su básico real" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;text-align:right;" onfocus="this.select()" onblur="onBlurMontoInput(this)" oninput="actualizarBaseOSSugerida(false)">
+          <div id="legajo-base-os-hint" style="font-size:11px;margin-top:3px;"></div>
           <div style="font-size:11px;color:var(--text3);margin-top:3px;">Completar SOLO si trabaja media jornada y por convenio aporta obra social como si fuera jornada completa.</div>
         </div>
       </div>
@@ -3239,6 +3240,7 @@ async function generarPDFRecibo(reciboId,cerrarAlTerminar,esVistaEmpleado){
 // ─── PÁGINA CONVENIOS COLECTIVOS (panel admin, catálogo compartido) ───
 let _convenioSeleccionadoPanelId=null;
 let _convenioSeleccionadoPanelNombre=null;
+let _convenioSeleccionadoPanelOS='';
 let _categoriasPanelCache={};
 
 async function cargarPageConvenios(){
@@ -3372,8 +3374,16 @@ async function eliminarObraSocialPanel(id,nombre){
 async function seleccionarConvenioEnPanel(id,nombre){
   _convenioSeleccionadoPanelId=id;
   _convenioSeleccionadoPanelNombre=nombre;
+  const{data:convRow,error:errConv}=await sb.from('convenios_colectivos').select('obra_social_gremio').eq('id',id).maybeSingle();
+  _convenioSeleccionadoPanelOS=convRow?.obra_social_gremio||'';
+  await poblarDatalistObrasSociales();
   document.getElementById('panel-categorias-header').innerHTML=`
     <div style="font-weight:600;color:var(--navy2);margin-bottom:8px;">Categorías de "${nombre}"</div>
+    <div style="margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">Obra social del gremio <span style="font-weight:400;text-transform:none;">(opcional)</span></div>
+      <input type="text" id="convenio-os-gremio" list="datalist-obras-sociales" ${errConv?'disabled':''} placeholder="Ej: Obra Social Personal de Maestranza" value="${_convenioSeleccionadoPanelOS.replace(/"/g,'&quot;')}" onblur="guardarOSGremioConvenio()" style="width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+      <div style="font-size:11px;color:${errConv?'var(--danger)':'var(--text3)'};margin-top:3px;">${errConv?'Falta crear la columna obra_social_gremio (text) en convenios_colectivos.':'Los empleados de media jornada con esta obra social aportan sobre la base de jornada completa de su categoría (columna "Base OS" de abajo).'}</div>
+    </div>
     <div style="display:flex;gap:8px;">
       <input type="text" id="nueva-categoria-nombre" placeholder="Nombre de la categoría nueva" style="flex:1;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
       <input type="text" inputmode="decimal" id="nueva-categoria-basico" placeholder="Básico (opcional)" style="width:160px;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;text-align:right;" onblur="onBlurMontoInput(this)">
@@ -3401,18 +3411,23 @@ function onBlurMontoInput(input){
 
 async function cargarListaCategoriasPanel(){
   if(!_convenioSeleccionadoPanelId)return;
-  const{data,error}=await sb.from('categorias_convenio').select('id,nombre,sueldo_basico').eq('convenio_id',_convenioSeleccionadoPanelId).order('nombre');
+  const{data,error}=await sb.from('categorias_convenio').select('id,nombre,sueldo_basico,base_os_completa').eq('convenio_id',_convenioSeleccionadoPanelId).order('nombre');
   const lista=document.getElementById('lista-categorias');
   if(error){
-    lista.innerHTML=`<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Error al cargar categorías</div><div style="font-size:12px;color:var(--text3);margin-top:4px;">${error.message}${error.message.includes('sueldo_basico')?' — falta agregar la columna sueldo_basico (numeric, nullable) en categorias_convenio.':''}</div></div>`;
+    lista.innerHTML=`<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Error al cargar categorías</div><div style="font-size:12px;color:var(--text3);margin-top:4px;">${error.message}${/sueldo_basico|base_os_completa/.test(error.message)?' — falta agregar la columna sueldo_basico / base_os_completa (numeric, nullable) en categorias_convenio.':''}</div></div>`;
     return;
   }
   if(!data?.length){lista.innerHTML=`<div class="empty"><div class="empty-icon">🏷️</div><div class="empty-title">Sin categorías todavía</div></div>`;return;}
   _categoriasPanelCache={};
-  data.forEach(x=>{_categoriasPanelCache[x.id]={nombre:x.nombre,sueldo_basico:x.sueldo_basico!=null?Number(x.sueldo_basico):null};});
-  lista.innerHTML=`<div class="card"><table><thead><tr><th>Categoría</th><th>Básico</th><th></th></tr></thead><tbody>${
+  data.forEach(x=>{_categoriasPanelCache[x.id]={nombre:x.nombre,sueldo_basico:x.sueldo_basico!=null?Number(x.sueldo_basico):null,base_os:x.base_os_completa!=null?Number(x.base_os_completa):null};});
+  lista.innerHTML=`<div class="card"><table><thead><tr><th>Categoría</th><th>Básico</th><th title="Solo para categorías de media jornada: base de jornada completa sobre la que aporta obra social el empleado del gremio">Base OS jornada completa</th><th></th></tr></thead><tbody>${
     data.map(c=>`<tr><td>${c.nombre}</td><td>
       <input type="text" inputmode="decimal" value="${formatearNumeroAR(c.sueldo_basico)}" placeholder="—" style="width:130px;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;text-align:right;" onfocus="this.select()" onblur="onBlurMontoInput(this);actualizarBasicoCategoria('${c.id}',this.value)">
+    </td><td>
+      <div style="display:flex;gap:4px;align-items:center;">
+        <input type="text" inputmode="decimal" value="${formatearNumeroAR(c.base_os_completa)}" placeholder="—" style="width:130px;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;text-align:right;" onfocus="this.select()" onblur="onBlurMontoInput(this);actualizarBaseOSCategoria('${c.id}',this.value)">
+        <button class="btn-sm btn-outline" title="Aplicar esta base a los legajos activos del gremio de esta categoría" onclick="aplicarBaseOSALegajos('${c.id}')">↻</button>
+      </div>
     </td><td style="text-align:right;white-space:nowrap;">
       <button class="btn-sm btn-outline" title="Aplicar este básico a los legajos activos de la categoría" onclick="aplicarBasicoALegajos('${c.id}')">↻</button>
       <button class="btn-sm btn-outline" onclick="editarCategoriaPanel('${c.id}','${c.nombre.replace(/'/g,"\\'")}')">✏️</button>
@@ -3442,16 +3457,16 @@ function _mismoMonto(a,b){return a!=null&&b!=null&&Math.abs(Number(a)-Number(b))
 // Legajos de empleados ACTIVOS del convenio + categoría indicados.
 async function _legajosActivosDeCategoria(convenioNombre,categoriaNombre){
   if(!convenioNombre){alert('Elegí un convenio en la lista de la izquierda primero.');return null;}
-  const{data:legajos,error}=await sb.from('legajo_empleado').select('empleado_id,sueldo_basico').eq('convenio',convenioNombre).eq('categoria',categoriaNombre);
+  const{data:legajos,error}=await sb.from('legajo_empleado').select('empleado_id,sueldo_basico,base_obra_social,obra_social').eq('convenio',convenioNombre).eq('categoria',categoriaNombre);
   if(error){alert('No se pudieron leer los legajos: '+error.message);return null;}
   if(!legajos?.length)return[];
-  const basicoPorEmpleado={};
-  legajos.forEach(l=>{basicoPorEmpleado[l.empleado_id]=l.sueldo_basico;});
+  const basicoPorEmpleado={},legajoPorEmpleado={};
+  legajos.forEach(l=>{basicoPorEmpleado[l.empleado_id]=l.sueldo_basico;legajoPorEmpleado[l.empleado_id]=l;});
   const activos=[];
   for(const lote of _enLotes(Object.keys(basicoPorEmpleado),80)){
     const{data:emps,error:errEmp}=await sb.from('empleados').select('id,nombre').in('id',lote).eq('activo',true);
     if(errEmp){alert('No se pudieron leer los empleados: '+errEmp.message);return null;}
-    emps?.forEach(e=>activos.push({empleado_id:e.id,nombre:e.nombre,sueldo_basico:basicoPorEmpleado[e.id]!=null?Number(basicoPorEmpleado[e.id]):null}));
+    emps?.forEach(e=>{const lg=legajoPorEmpleado[e.id];activos.push({empleado_id:e.id,nombre:e.nombre,sueldo_basico:basicoPorEmpleado[e.id]!=null?Number(basicoPorEmpleado[e.id]):null,base_os:lg?.base_obra_social!=null?Number(lg.base_obra_social):null,obra_social:lg?.obra_social||''});});
   }
   return activos.sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es'));
 }
@@ -3464,6 +3479,87 @@ async function _aplicarBasicoALegajos(ids,nuevo){
     actualizados+=data?.length||0;
   }
   return actualizados;
+}
+
+async function guardarOSGremioConvenio(){
+  const input=document.getElementById('convenio-os-gremio');
+  if(!input||input.disabled||!_convenioSeleccionadoPanelId)return;
+  const valor=resolverNombreObraSocial(input.value);
+  input.value=valor;
+  if(valor===_convenioSeleccionadoPanelOS)return;
+  const{data,error}=await sb.from('convenios_colectivos').update({obra_social_gremio:valor||null}).eq('id',_convenioSeleccionadoPanelId).select('id');
+  if(error){alert('No se pudo guardar la obra social del gremio: '+error.message);return;}
+  if(!data?.length){alert('No se pudo guardar (sin permiso para modificar este convenio).');return;}
+  _convenioSeleccionadoPanelOS=valor;
+  showToast('✅ Obra social del gremio actualizada.');
+}
+
+function _esDelGremio(l){
+  const og=normalizarTexto(resolverNombreObraSocial(_convenioSeleccionadoPanelOS));
+  return !!og&&normalizarTexto(resolverNombreObraSocial(l.obra_social))===og;
+}
+
+async function _aplicarBaseOSALegajos(ids,nuevo){
+  let actualizados=0;
+  for(const lote of _enLotes(ids,80)){
+    const{data,error}=await sb.from('legajo_empleado').update({base_obra_social:nuevo}).in('empleado_id',lote).select('empleado_id');
+    if(error){alert('Error actualizando legajos: '+error.message);break;}
+    actualizados+=data?.length||0;
+  }
+  return actualizados;
+}
+
+async function actualizarBaseOSCategoria(id,valorStr){
+  const nuevo=parsearNumeroAR(valorStr);
+  const previo=_categoriasPanelCache[id];
+  const anterior=previo?previo.base_os:null;
+  if((anterior==null&&nuevo==null)||(anterior!=null&&nuevo!=null&&Math.abs(anterior-nuevo)<0.005))return;
+  const{data,error}=await sb.from('categorias_convenio').update({base_os_completa:nuevo}).eq('id',id).select('id');
+  if(error){alert('No se pudo guardar la base: '+error.message);return;}
+  if(!data?.length){alert('No se pudo guardar la base (sin permiso para modificar esta categoría).');return;}
+  if(previo)previo.base_os=nuevo;
+  showToast('✅ Base OS actualizada.');
+  if(nuevo!=null&&previo)await ofrecerPropagarBaseOS(previo.nombre,anterior,nuevo);
+}
+
+// Al cambiar la base OS de una categoría: propone actualizar a los empleados activos
+// del gremio (su obra social = la del gremio del convenio) que tenían la base anterior
+// o ninguna. Los que tienen otro monto se consideran acuerdos particulares.
+async function ofrecerPropagarBaseOS(categoriaNombre,anterior,nuevo){
+  if(!_convenioSeleccionadoPanelOS){
+    showToast('Cargá la obra social del gremio del convenio para que esta base se aplique a los legajos.');
+    return;
+  }
+  const activos=await _legajosActivosDeCategoria(_convenioSeleccionadoPanelNombre,categoriaNombre);
+  if(!activos?.length)return;
+  const gremio=activos.filter(_esDelGremio);
+  const siguen=gremio.filter(l=>l.base_os==null||_mismoMonto(l.base_os,anterior));
+  const otros=gremio.filter(l=>!siguen.includes(l)&&!_mismoMonto(l.base_os,nuevo));
+  if(!siguen.length)return;
+  const ejemplo=siguen.slice(0,5).map(l=>'• '+l.nombre).join('\n')+(siguen.length>5?`\n• …y ${siguen.length-5} más`:'');
+  const ok=confirm(`Cambiaste la base OS de jornada completa de "${categoriaNombre}"${anterior!=null?` de ${mon(anterior)}`:''} a ${mon(nuevo)}.\n\n¿Actualizar el legajo de ${siguen.length} empleado(s) activo(s) con ${_convenioSeleccionadoPanelOS} que tenían la anterior (o ninguna)?\n\n${ejemplo}`+(otros.length?`\n\n${otros.length} con otro monto (acuerdo particular) no se tocan.`:'')+(activos.length-gremio.length?`\n${activos.length-gremio.length} activo(s) de la categoría con otra obra social no se tocan.`:'')+`\n\nNo modifica recibos ya cargados ni publicados, solo el legajo.`);
+  if(!ok)return;
+  const n=await _aplicarBaseOSALegajos(siguen.map(l=>l.empleado_id),nuevo);
+  showToast(`✅ Base OS actualizada en ${n} legajo(s).`);
+}
+
+// Botón ↻ de la columna Base OS: aplica la base actual a todos los legajos activos
+// del gremio de la categoría que difieran (incluye los que no tenían ninguna).
+async function aplicarBaseOSALegajos(catId){
+  const cat=_categoriasPanelCache[catId];
+  if(!cat||cat.base_os==null){alert('Esta categoría todavía no tiene base OS cargada.');return;}
+  if(!_convenioSeleccionadoPanelOS){alert('Primero cargá la obra social del gremio de este convenio (arriba).');return;}
+  const activos=await _legajosActivosDeCategoria(_convenioSeleccionadoPanelNombre,cat.nombre);
+  if(!activos)return;
+  const gremio=activos.filter(_esDelGremio);
+  if(!gremio.length){alert(`Ningún empleado activo de "${cat.nombre}" tiene como obra social "${_convenioSeleccionadoPanelOS}".`);return;}
+  const difieren=gremio.filter(l=>l.base_os==null||!_mismoMonto(l.base_os,cat.base_os));
+  if(!difieren.length){alert(`Los ${gremio.length} legajo(s) activo(s) del gremio de "${cat.nombre}" ya tienen ${mon(cat.base_os)}.`);return;}
+  const lista=difieren.slice(0,10).map(l=>`• ${l.nombre}: ${l.base_os!=null?mon(l.base_os):'sin base cargada'}`).join('\n')+(difieren.length>10?`\n• …y ${difieren.length-10} más`:'');
+  const ok=confirm(`${difieren.length} empleado(s) activo(s) de "${cat.nombre}" con ${_convenioSeleccionadoPanelOS} tienen otra base (o ninguna):\n\n${lista}\n\nSi alguno tiene un acuerdo particular, también se va a pisar. ¿Aplicar ${mon(cat.base_os)} a todos?\n\nNo modifica recibos ya cargados ni publicados, solo el legajo.`);
+  if(!ok)return;
+  const n=await _aplicarBaseOSALegajos(difieren.map(l=>l.empleado_id),cat.base_os);
+  showToast(`✅ Base OS actualizada en ${n} legajo(s).`);
 }
 
 // Se llama al cambiar el básico de una categoría. Solo propone actualizar a los
@@ -3544,7 +3640,11 @@ let _conveniosCache=[];
 let _categoriasCache=[];
 
 async function cargarConveniosCatalogo(){
-  const{data}=await sb.from('convenios_colectivos').select('id,nombre').order('nombre');
+  let{data,error}=await sb.from('convenios_colectivos').select('id,nombre,obra_social_gremio').order('nombre');
+  if(error){
+    // La columna obra_social_gremio todavía no existe: seguimos sin ella.
+    ({data}=await sb.from('convenios_colectivos').select('id,nombre').order('nombre'));
+  }
   _conveniosCache=data||[];
 }
 
@@ -3563,17 +3663,18 @@ function renderConvenioSelect(nombreSeleccionado){
   document.getElementById('legajo-convenio-nuevo-input').value='';
 }
 
-function onCambioConvenioSelect(){
+async function onCambioConvenioSelect(){
   const val=document.getElementById('legajo-convenio-select').value;
   const inputNuevo=document.getElementById('legajo-convenio-nuevo-input');
   if(val==='__nuevo__'){
     inputNuevo.style.display='block';
     inputNuevo.focus();
-    cargarCategoriasParaConvenio('');
+    await cargarCategoriasParaConvenio('');
   } else {
     inputNuevo.style.display='none';
-    cargarCategoriasParaConvenio(val);
+    await cargarCategoriasParaConvenio(val);
   }
+  actualizarBaseOSSugerida();
 }
 
 async function confirmarNuevoConvenio(){
@@ -3611,7 +3712,11 @@ async function cargarCategoriasParaConvenio(nombreConvenio,categoriaSeleccionada
     _categoriasCache=[];
     return;
   }
-  const{data,error}=await sb.from('categorias_convenio').select('id,nombre,sueldo_basico').eq('convenio_id',convenio.id).order('nombre');
+  let{data,error}=await sb.from('categorias_convenio').select('id,nombre,sueldo_basico,base_os_completa').eq('convenio_id',convenio.id).order('nombre');
+  if(error){
+    // La columna base_os_completa todavía no existe: seguimos sin ella.
+    ({data,error}=await sb.from('categorias_convenio').select('id,nombre,sueldo_basico').eq('convenio_id',convenio.id).order('nombre'));
+  }
   if(error){
     sel.innerHTML='<option value="">— Error cargando categorías, revisá la consola —</option>';
     console.error('Error cargando categorías_convenio:',error);
@@ -3644,6 +3749,7 @@ function onCambioCategoriaSelect(){
     setTimeout(()=>{inputBasico.style.background='';},1500);
   }
   actualizarHintBasico();
+  actualizarBaseOSSugerida();
 }
 
 // Muestra un aviso solo cuando hace falta: si el básico cargado coincide con
@@ -3666,6 +3772,69 @@ function actualizarHintBasico(){
   } else {
     hint.innerHTML=`⚠️ Distinto al básico de convenio para "${categoria.nombre}" (${mon(categoria.sueldo_basico)}) — revisá si es un acuerdo particular con este empleado.`;
     hint.style.color='var(--danger)';
+  }
+}
+
+// Si en la obra social del legajo se carga un código (ej. 111209) o el nombre con
+// otras mayúsculas, lo traducimos al nombre exacto del catálogo. Si es un código que
+// el catálogo no conoce, avisamos para que se cargue con "+ Nueva".
+function normalizarObraSocialLegajo(){
+  const input=document.getElementById('legajo-os');
+  const hint=document.getElementById('legajo-os-hint');
+  if(!input)return;
+  const v=input.value.trim();
+  if(v){
+    const nombre=resolverNombreObraSocial(v);
+    if(nombre!==v){
+      input.value=nombre;
+      input.style.background='#FFF8E1';
+      setTimeout(()=>{input.style.background='';},1500);
+      if(hint)hint.textContent='';
+    } else if(/^\d+$/.test(v)&&hint){
+      hint.textContent='⚠️ Ese código no figura en el catálogo de Obras Sociales. Cargalo con "+ Nueva" (nombre y código) para que se reconozca.';
+    }
+  }
+  actualizarBaseOSSugerida();
+}
+
+// Regla de obra social de media jornada: si el convenio define una obra social del
+// gremio, la categoría tiene base OS de jornada completa cargada y la obra social del
+// empleado ES la del gremio, el aporte de obra social se liquida sobre esa base.
+function _elegibleBaseOS(){
+  const convNombre=document.getElementById('legajo-convenio-select')?.value;
+  const catNombre=document.getElementById('legajo-categoria-select')?.value;
+  const os=normalizarTexto(resolverNombreObraSocial(document.getElementById('legajo-os')?.value||''));
+  const conv=_conveniosCache.find(c=>c.nombre===convNombre);
+  const cat=_categoriasCache.find(c=>c.nombre===catNombre);
+  const osGremio=conv?.obra_social_gremio||'';
+  const base=cat?.base_os_completa!=null?Number(cat.base_os_completa):null;
+  return{cat,base,osGremio,elegible:base!=null&&!!osGremio&&!!os&&os===normalizarTexto(resolverNombreObraSocial(osGremio))};
+}
+
+function actualizarBaseOSSugerida(autoRellenar=true){
+  const hint=document.getElementById('legajo-base-os-hint');
+  const input=document.getElementById('legajo-base-os');
+  if(!hint||!input)return;
+  const{cat,base,osGremio,elegible}=_elegibleBaseOS();
+  if(elegible){
+    if(autoRellenar&&parsearNumeroAR(input.value)==null){
+      input.value=formatearNumeroAR(base);
+      input.style.background='#FFF8E1';
+      setTimeout(()=>{input.style.background='';},1500);
+    }
+    const actual=parsearNumeroAR(input.value);
+    if(actual!=null&&Math.abs(actual-base)>=0.01){
+      hint.innerHTML=`⚠️ Distinta a la base de convenio para "${cat.nombre}" (${mon(base)}) — revisá si es un acuerdo particular.`;
+      hint.style.color='var(--danger)';
+    } else {
+      hint.innerHTML=`✓ Obra social del gremio (${osGremio}) en "${cat.nombre}": el aporte se liquida sobre la base de jornada completa del convenio${actual!=null?'':` (${mon(base)})`}.`;
+      hint.style.color='var(--text3)';
+    }
+  } else if(parsearNumeroAR(input.value)!=null){
+    hint.innerHTML='⚠️ Tiene base de jornada completa cargada, pero según Convenios esta combinación de convenio, categoría y obra social no la requiere. Si no corresponde, dejá el campo vacío.';
+    hint.style.color='var(--danger)';
+  } else {
+    hint.textContent='';
   }
 }
 
@@ -3710,16 +3879,29 @@ function empresaIdParaLegajo(){
   return empresaActivaId||currentUser?.empresa_id||null;
 }
 
+// Catálogo de obras sociales en memoria (nombre + código), usado para traducir
+// un código cargado a mano (ej. 111209) al nombre del catálogo.
+let _catalogoOS=[];
+function resolverNombreObraSocial(valor){
+  const v=(valor||'').trim();
+  if(!v)return '';
+  const porCodigo=_catalogoOS.find(o=>o.codigo&&String(o.codigo).trim()===v);
+  if(porCodigo)return porCodigo.nombre;
+  const porNombre=_catalogoOS.find(o=>normalizarTexto((o.nombre||'').trim())===normalizarTexto(v));
+  return porNombre?porNombre.nombre:v;
+}
+
 async function poblarDatalistObrasSociales(){
   const dl=document.getElementById('datalist-obras-sociales');
   if(!dl)return;
-  const{data:catalogo,error:errCatalogo}=await sb.from('obras_sociales').select('nombre').order('nombre');
+  const{data:catalogo,error:errCatalogo}=await sb.from('obras_sociales').select('nombre,codigo').order('nombre');
   if(errCatalogo){
     console.error('Error cargando catálogo de obras_sociales:',errCatalogo);
     const hintOs=document.getElementById('legajo-os-hint');
     if(hintOs)hintOs.innerHTML=`<span style="color:var(--danger);">⚠️ No se pudo cargar el catálogo de Obras Sociales: ${errCatalogo.message}</span>`;
     return;
   }
+  _catalogoOS=catalogo||[];
   const nombres=[...new Set((catalogo||[]).map(o=>(o.nombre||'').trim()).filter(Boolean))].sort();
   dl.innerHTML=nombres.map(v=>`<option value="${v.replace(/"/g,'&quot;')}">`).join('');
 }
@@ -3728,8 +3910,9 @@ async function poblarDatalistObrasSociales(){
 // disponible al instante en el datalist y también en el catálogo de Convenios.
 function agregarObraSocialDesdeLegajo(){
   const sugerido=document.getElementById('legajo-os').value.trim();
-  document.getElementById('nueva-os-legajo-nombre').value=sugerido;
-  document.getElementById('nueva-os-legajo-codigo').value='';
+  const esCodigo=/^\d+$/.test(sugerido);
+  document.getElementById('nueva-os-legajo-nombre').value=esCodigo?'':sugerido;
+  document.getElementById('nueva-os-legajo-codigo').value=esCodigo?sugerido:'';
   abrirModal('modal-agregar-os');
   setTimeout(()=>document.getElementById('nueva-os-legajo-nombre').focus(),50);
 }
@@ -3739,11 +3922,12 @@ async function confirmarAgregarObraSocialDesdeLegajo(){
   if(!nombre){alert('Ingresá un nombre.');return;}
   const codigo=document.getElementById('nueva-os-legajo-codigo').value.trim()||null;
   const inputOs=document.getElementById('legajo-os');
-  const{data:existentes}=await sb.from('obras_sociales').select('id,nombre');
-  const duplicado=existentes?.find(o=>o.nombre.toLowerCase()===nombre.toLowerCase());
+  const{data:existentes}=await sb.from('obras_sociales').select('id,nombre,codigo');
+  const duplicado=existentes?.find(o=>o.nombre.toLowerCase()===nombre.toLowerCase()||(codigo&&o.codigo&&String(o.codigo).trim()===codigo));
   if(duplicado){
     inputOs.value=duplicado.nombre;
     document.getElementById('legajo-os-hint').textContent='';
+    actualizarBaseOSSugerida();
     cerrarModal('modal-agregar-os');
     showToast(`Ya existía "${duplicado.nombre}" en el catálogo — la elegí.`);
     return;
@@ -3752,6 +3936,7 @@ async function confirmarAgregarObraSocialDesdeLegajo(){
   if(error){alert('No se pudo agregar: '+error.message);return;}
   inputOs.value=nombre;
   document.getElementById('legajo-os-hint').textContent='';
+  actualizarBaseOSSugerida();
   cerrarModal('modal-agregar-os');
   showToast('✅ Obra Social agregada al catálogo.');
   poblarDatalistObrasSociales();
@@ -3767,7 +3952,9 @@ async function abrirLegajoEmpleado(empleadoId,nombre){
   document.getElementById('legajo-afiliado').checked=false;
   const hintOsInicial=document.getElementById('legajo-os-hint');
   if(hintOsInicial)hintOsInicial.textContent='';
-  poblarDatalistObrasSociales();
+  const hintBaseOsInicial=document.getElementById('legajo-base-os-hint');
+  if(hintBaseOsInicial)hintBaseOsInicial.textContent='';
+  await poblarDatalistObrasSociales();
 
   await cargarConveniosCatalogo();
   renderConvenioSelect('');
@@ -3779,7 +3966,7 @@ async function abrirLegajoEmpleado(empleadoId,nombre){
     document.getElementById('legajo-situacion').value=legajo.situacion_revista||'activo';
     document.getElementById('legajo-basico').value=formatearNumeroAR(legajo.sueldo_basico);
     document.getElementById('legajo-base-os').value=formatearNumeroAR(legajo.base_obra_social);
-    document.getElementById('legajo-os').value=legajo.obra_social||'';
+    document.getElementById('legajo-os').value=resolverNombreObraSocial(legajo.obra_social||'');
     document.getElementById('legajo-banco').value=legajo.banco||'';
     document.getElementById('legajo-cbu').value=legajo.cbu||'';
     document.getElementById('legajo-domicilio').value=legajo.domicilio||'';
@@ -3787,6 +3974,7 @@ async function abrirLegajoEmpleado(empleadoId,nombre){
     renderConvenioSelect(legajo.convenio||'');
     await cargarCategoriasParaConvenio(legajo.convenio||'',legajo.categoria||'');
     onCambioCategoriaSelect();
+    normalizarObraSocialLegajo();
   }
   abrirModal('modal-legajo-empleado');
 }
@@ -3826,7 +4014,7 @@ async function guardarLegajo(){
       categoria:categoriaVal&&categoriaVal!=='__nueva__'?categoriaVal:null,
       sueldo_basico:parsearNumeroAR(document.getElementById('legajo-basico').value),
       base_obra_social:parsearNumeroAR(document.getElementById('legajo-base-os').value),
-      obra_social:document.getElementById('legajo-os').value.trim()||null,
+      obra_social:resolverNombreObraSocial(document.getElementById('legajo-os').value)||null,
       banco:document.getElementById('legajo-banco').value.trim()||null,
       cbu:document.getElementById('legajo-cbu').value.trim()||null,
       domicilio:document.getElementById('legajo-domicilio').value.trim()||null,
