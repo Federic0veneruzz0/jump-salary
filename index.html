@@ -387,6 +387,23 @@ tr:last-child td{border-bottom:none;}
           <button class="btn btn-primary" onclick="importarARCA()" style="width:auto;padding:10px 24px;">Importar empleados</button>
         </div>
         <div class="card">
+          <div class="card-title">Completar legajos desde SOS Contador</div>
+          <div style="font-size:12px;color:var(--text3);margin:-4px 0 12px;">Subí el "Listado de legajos" que exporta SOS Contador (<em>30-XXXXXXXX-X_legajos.xls</em>). Solo completa los datos que el legajo tiene <strong>vacíos</strong>: no pisa nada de lo ya cargado, y antes de guardar te muestra un resumen.</div>
+          <div class="upload-zone" id="dz-legajos-sos" onclick="document.getElementById('fi-legajos-sos').click()">
+            <div class="upload-icon">📋</div>
+            <div class="upload-title">Listado de legajos (.xls) de SOS Contador</div>
+            <div class="upload-sub">Arrastrá o hacé clic</div>
+            <input type="file" id="fi-legajos-sos" accept=".xls,.html,.htm" style="display:none">
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px 18px;margin:0 0 14px;font-size:13px;">
+            <label style="display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:normal;font-weight:400;color:var(--text);cursor:pointer;"><input type="checkbox" id="chk-sos-nac" checked style="width:15px;height:15px;margin:0;"> Fecha de nacimiento</label>
+            <label style="display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:normal;font-weight:400;color:var(--text);cursor:pointer;"><input type="checkbox" id="chk-sos-leg" checked style="width:15px;height:15px;margin:0;"> Número de legajo</label>
+            <label style="display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:normal;font-weight:400;color:var(--text);cursor:pointer;"><input type="checkbox" id="chk-sos-os" checked style="width:15px;height:15px;margin:0;"> Obra social (el código se traduce con el catálogo)</label>
+            <label style="display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:normal;font-weight:400;color:var(--text);cursor:pointer;"><input type="checkbox" id="chk-sos-dom" style="width:15px;height:15px;margin:0;"> Domicilio</label>
+          </div>
+          <button class="btn btn-primary" id="btn-revisar-legajos-sos" onclick="revisarLegajosSOS()" style="width:auto;padding:10px 24px;">Revisar y completar legajos</button>
+        </div>
+        <div class="card">
           <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
             <span>Nómina</span>
             <div style="display:flex;gap:8px;">
@@ -4786,6 +4803,136 @@ function parseARCAtxt(text){
   }).filter(Boolean);
 }
 
+// ─── COMPLETAR LEGAJOS DESDE EL LISTADO DE LEGAJOS DE SOS CONTADOR ───
+let _legajosSOS=null;
+
+// "dd/mm/aaaa" -> "aaaa-mm-dd" (null si no es una fecha real o no es razonable)
+function fechaSOSaISO(s){
+  const m=/^(\d{2})\/(\d{2})\/(\d{4})$/.exec((s||'').trim());
+  if(!m)return null;
+  const d=+m[1],mo=+m[2],y=+m[3];
+  const f=new Date(Date.UTC(y,mo-1,d));
+  if(f.getUTCFullYear()!==y||f.getUTCMonth()!==mo-1||f.getUTCDate()!==d)return null;
+  if(y<1900||f>new Date())return null;
+  return `${m[3]}-${m[2]}-${m[1]}`;
+}
+
+// El export de SOS Contador es una tabla HTML con extensión .xls.
+function parseLegajosSOS(html){
+  const doc=new DOMParser().parseFromString(html,'text/html');
+  const filas=[...doc.querySelectorAll('tr')].map(tr=>[...tr.querySelectorAll('td,th')].map(td=>td.textContent.trim()));
+  const hi=filas.findIndex(f=>f[0]==='CUIT Empresa');
+  if(hi<0)return null;
+  const cols=filas[hi];
+  const i=n=>cols.indexOf(n);
+  const ix={cuit:i('CUIT Empresa'),leg:i('Legajo'),cuil:i('CUIL'),nom:i('Apellido y Nombre'),nac:i('Fecha de Nacimiento'),
+            dom:i('Domicilio'),loc:i('Localidad'),cp:i('CP'),prov:i('Provincia'),osTxt:i('Obra Social'),osCod:i('Cod Obra Social')};
+  if(ix.cuit<0||ix.cuil<0||ix.nac<0)return null;
+  const g=(f,k)=>ix[k]>=0?(f[ix[k]]||'').trim():'';
+  return filas.slice(hi+1).filter(f=>nc(g(f,'cuil')).length===11).map(f=>{
+    const dom=g(f,'dom'),loc=g(f,'loc'),cp=g(f,'cp'),prov=g(f,'prov');
+    return{
+      cuitEmpresa:nc(g(f,'cuit')),cuil:nc(g(f,'cuil')),nombre:g(f,'nom'),legajo:g(f,'leg'),
+      nacimiento:fechaSOSaISO(g(f,'nac')),
+      domicilio:dom?`${dom}${loc?`, ${loc}`:''}${cp?` (CP ${cp})`:''}${prov?`, ${prov}`:''}`:'',
+      codOS:g(f,'osCod'),textoOS:g(f,'osTxt')
+    };
+  });
+}
+
+async function revisarLegajosSOS(){
+  if(!_legajosSOS?.length){alert('Primero subí el Listado de legajos de SOS Contador.');return;}
+  const op={nac:document.getElementById('chk-sos-nac').checked,leg:document.getElementById('chk-sos-leg').checked,
+            os:document.getElementById('chk-sos-os').checked,dom:document.getElementById('chk-sos-dom').checked};
+  if(!op.nac&&!op.leg&&!op.os&&!op.dom){alert('Tildá al menos un dato para completar.');return;}
+  const btn=document.getElementById('btn-revisar-legajos-sos');
+  const txtBtn=btn.textContent;btn.disabled=true;btn.textContent='Revisando...';
+  try{
+    await poblarDatalistObrasSociales();
+    // Empresas del archivo (por CUIT) dentro de tu estudio
+    const cuits=[...new Set(_legajosSOS.map(r=>r.cuitEmpresa))];
+    const{data:empresas,error:errEmp}=await sb.from('empresas').select('id,nombre,cuit').in('cuit',cuits);
+    if(errEmp){alert('No se pudieron leer las empresas: '+errEmp.message);return;}
+    if(!empresas?.length){alert(`El CUIT del archivo (${cuits.map(fc).join(', ')}) no corresponde a ninguna empresa de tu estudio.`);return;}
+    const empresaPorCuit={};empresas.forEach(e=>empresaPorCuit[nc(e.cuit)]=e);
+
+    // Empleados (activos y dados de baja) de esas empresas, por CUIL
+    const empleadoPorClave={};
+    for(const e of empresas){
+      const{data:emps,error}=await sb.from('empleados').select('id,cuil,nombre,activo').eq('empresa_id',e.id);
+      if(error){alert('No se pudieron leer los empleados: '+error.message);return;}
+      emps?.forEach(x=>{empleadoPorClave[e.id+'|'+nc(x.cuil)]=x;});
+    }
+    // Legajos ya existentes
+    const idsEmp=Object.values(empleadoPorClave).map(x=>x.id);
+    const legajoPorEmp={};
+    for(const lote of _enLotes(idsEmp,80)){
+      const{data,error}=await sb.from('legajo_empleado').select('empleado_id,numero_legajo,fecha_nacimiento,domicilio,obra_social').in('empleado_id',lote);
+      if(error){alert('No se pudieron leer los legajos: '+error.message);return;}
+      data?.forEach(l=>{legajoPorEmp[l.empleado_id]=l;});
+    }
+
+    const cuenta={nac:{ok:0,ya:0,sin:0},leg:{ok:0,ya:0,sin:0},os:{ok:0,ya:0,sin:0},dom:{ok:0,ya:0,sin:0}};
+    const noEncontrados=[],sinCatalogo={},plan=[];
+    const nombreEmpresa=empresas.map(e=>e.nombre).join(', ');
+    for(const r of _legajosSOS){
+      const emp=empresaPorCuit[r.cuitEmpresa];
+      const e=emp&&empleadoPorClave[emp.id+'|'+r.cuil];
+      if(!e){noEncontrados.push(r.nombre||r.cuil);continue;}
+      const leg=legajoPorEmp[e.id];
+      const cambios={};
+      const evaluar=(k,valorArchivo,valorLegajo,campo)=>{
+        if(!op[k])return;
+        if(valorLegajo){cuenta[k].ya++;return;}
+        if(!valorArchivo){cuenta[k].sin++;return;}
+        cambios[campo]=valorArchivo;cuenta[k].ok++;
+      };
+      evaluar('nac',r.nacimiento,leg?.fecha_nacimiento,'fecha_nacimiento');
+      evaluar('leg',r.legajo,leg?.numero_legajo,'numero_legajo');
+      evaluar('dom',r.domicilio,leg?.domicilio,'domicilio');
+      if(op.os){
+        const nombreOS=r.codOS?resolverNombreObraSocial(r.codOS):'';
+        const resuelta=!!nombreOS&&nombreOS!==r.codOS;
+        if(!resuelta&&r.codOS&&!leg?.obra_social)sinCatalogo[r.codOS]=r.textoOS;
+        evaluar('os',resuelta?nombreOS:'',leg?.obra_social,'obra_social');
+      }
+      if(Object.keys(cambios).length)plan.push({empleado:e,empresa:emp,existe:!!leg,cambios});
+    }
+    const lineas=[];
+    if(op.nac)lineas.push(`• Fecha de nacimiento: ${cuenta.nac.ok} a completar (${cuenta.nac.ya} ya la tenían, ${cuenta.nac.sin} sin dato en el archivo)`);
+    if(op.leg)lineas.push(`• Número de legajo: ${cuenta.leg.ok} a completar (${cuenta.leg.ya} ya lo tenían)`);
+    if(op.os)lineas.push(`• Obra social: ${cuenta.os.ok} a completar (${cuenta.os.ya} ya la tenían, ${cuenta.os.sin} sin dato o con código que no está en el catálogo)`);
+    if(op.dom)lineas.push(`• Domicilio: ${cuenta.dom.ok} a completar (${cuenta.dom.ya} ya lo tenían, ${cuenta.dom.sin} sin dato en el archivo)`);
+    const codigos=Object.keys(sinCatalogo);
+    const msg=`Archivo de ${nombreEmpresa}: ${_legajosSOS.length} legajos. Encontrados en Jump Salary: ${_legajosSOS.length-noEncontrados.length}.`
+      +(noEncontrados.length?`\n\nNo encontrados (no se tocan): ${noEncontrados.slice(0,8).join(', ')}${noEncontrados.length>8?` y ${noEncontrados.length-8} más`:''}.`:'')
+      +`\n\nSe completan solo campos vacíos:\n${lineas.join('\n')}`
+      +(codigos.length?`\n\nCódigos de obra social que no están en tu catálogo (cargalos en Convenios → Obras Sociales con nombre y código y repetí este paso): ${codigos.join(', ')}.`:'')
+      +`\n\n${plan.length?`Se van a actualizar ${plan.length} legajo(s). ¿Aplicar?`:'No hay nada para completar.'}`;
+    if(!plan.length){alert(msg);return;}
+    if(!confirm(msg))return;
+
+    btn.textContent='Guardando...';
+    let hechos=0;const errores=[];
+    for(const lote of _enLotes(plan,8)){
+      await Promise.all(lote.map(async it=>{
+        const{error}=it.existe
+          ?await sb.from('legajo_empleado').update(it.cambios).eq('empleado_id',it.empleado.id)
+          :await sb.from('legajo_empleado').insert({empresa_id:it.empresa.id,empleado_id:it.empleado.id,situacion_revista:it.empleado.activo?'activo':'baja',...it.cambios});
+        if(error)errores.push(`${it.empleado.nombre}: ${error.message}`);else hechos++;
+      }));
+    }
+    if(errores.length)alert(`Se completaron ${hechos} legajo(s), pero ${errores.length} dieron error.\n\nPrimero: ${errores[0]}\n\n(Si dice que falta una columna, creala en Supabase — por ejemplo fecha_nacimiento en legajo_empleado.)`);
+    else showToast(`✅ Se completaron ${hechos} legajo(s).`);
+    _legajosSOS=null;
+    const dz=document.getElementById('dz-legajos-sos');dz.classList.remove('loaded');dz.querySelector('.upload-sub').textContent='Arrastrá o hacé clic';
+    document.getElementById('fi-legajos-sos').value='';
+    cargarEmpleados();
+  }finally{
+    btn.disabled=false;btn.textContent=txtBtn;
+  }
+}
+
 // ─── SETUP UPLOADS ───
 function setupUploads(){
   const fiXls=document.getElementById('fi-xls-main');
@@ -4806,6 +4953,19 @@ function setupUploads(){
     r.readAsText(f,'UTF-8');
   });
 
+  document.getElementById('fi-legajos-sos')?.addEventListener('change',e=>{
+    const f=e.target.files[0];if(!f)return;
+    const r=new FileReader();
+    r.onload=ev=>{
+      _legajosSOS=parseLegajosSOS(ev.target.result);
+      const dz=document.getElementById('dz-legajos-sos');
+      if(!_legajosSOS){dz.classList.remove('loaded');dz.querySelector('.upload-sub').textContent='⚠️ No parece un Listado de legajos de SOS Contador';return;}
+      dz.classList.add('loaded');
+      dz.querySelector('.upload-sub').textContent=`✅ ${_legajosSOS.length} legajos leídos de "${f.name}"`;
+    };
+    r.readAsText(f,'UTF-8');
+  });
+
   fiArca?.addEventListener('change',e=>{
     const f=e.target.files[0];if(!f)return;
     const r=new FileReader();
@@ -4814,7 +4974,7 @@ function setupUploads(){
   });
 
   // Setup drag & drop
-  ['dz-xls-main','dz-conc-main','dz-arca'].forEach(id=>{
+  ['dz-xls-main','dz-conc-main','dz-arca','dz-legajos-sos'].forEach(id=>{
     const dz=document.getElementById(id);
     if(!dz)return;
     dz.addEventListener('dragover',e=>{e.preventDefault();dz.style.borderColor='var(--accent)';});
