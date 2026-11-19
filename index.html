@@ -829,6 +829,10 @@ tr:last-child td{border-bottom:none;}
           <label>Número de Legajo <span style="font-weight:400;color:var(--text3);font-size:11px;">(opcional)</span></label>
           <input type="text" id="legajo-numero" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
         </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Fecha de nacimiento <span style="font-weight:400;color:var(--text3);font-size:11px;">(opcional)</span></label>
+          <input type="date" id="legajo-fecha-nacimiento" min="1900-01-01" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+        </div>
         <div class="field" style="margin-bottom:0;grid-column:1/-1;">
           <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:normal;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
             <input type="checkbox" id="legajo-afiliado" style="width:16px;height:16px;margin:0;">
@@ -3955,9 +3959,10 @@ async function abrirLegajoEmpleado(empleadoId,nombre){
   if(!empId){alert('No se pudo determinar la empresa. Volvé a intentarlo.');return;}
   _legajoEmpleadoId=empleadoId;
   document.getElementById('legajo-empleado-title').textContent=`Legajo — ${nombre}`;
-  const campos=['numero','situacion','basico','base-os','os','banco','cbu','domicilio'];
+  const campos=['numero','fecha-nacimiento','situacion','basico','base-os','os','banco','cbu','domicilio'];
   campos.forEach(c=>{const el=document.getElementById('legajo-'+c);if(el)el.value=c==='situacion'?'activo':'';});
   document.getElementById('legajo-afiliado').checked=false;
+  document.getElementById('legajo-fecha-nacimiento').max=new Date().toISOString().slice(0,10);
   const hintOsInicial=document.getElementById('legajo-os-hint');
   if(hintOsInicial)hintOsInicial.textContent='';
   const hintBaseOsInicial=document.getElementById('legajo-base-os-hint');
@@ -3971,6 +3976,7 @@ async function abrirLegajoEmpleado(empleadoId,nombre){
   const{data:legajo}=await sb.from('legajo_empleado').select('*').eq('empleado_id',empleadoId).maybeSingle();
   if(legajo){
     document.getElementById('legajo-numero').value=legajo.numero_legajo||'';
+    document.getElementById('legajo-fecha-nacimiento').value=legajo.fecha_nacimiento||'';
     document.getElementById('legajo-situacion').value=legajo.situacion_revista||'activo';
     document.getElementById('legajo-basico').value=formatearNumeroAR(legajo.sueldo_basico);
     document.getElementById('legajo-base-os').value=formatearNumeroAR(legajo.base_obra_social);
@@ -4017,6 +4023,7 @@ async function guardarLegajo(){
       empresa_id:empId,
       empleado_id:_legajoEmpleadoId,
       numero_legajo:document.getElementById('legajo-numero').value.trim()||null,
+      fecha_nacimiento:document.getElementById('legajo-fecha-nacimiento').value||null,
       situacion_revista:document.getElementById('legajo-situacion').value,
       convenio:convenioVal&&convenioVal!=='__nuevo__'?convenioVal:null,
       categoria:categoriaVal&&categoriaVal!=='__nueva__'?categoriaVal:null,
