@@ -598,6 +598,7 @@ tr:last-child td{border-bottom:none;}
               <div style="font-size:13px;color:var(--text3);">← Elegí un convenio para ver y editar sus categorías</div>
             </div>
             <div id="lista-categorias"></div>
+            <div id="panel-escalas"></div>
           </div>
         </div>
 
@@ -3416,11 +3417,163 @@ async function eliminarConvenioPanel(id,nombre){
   if(_convenioSeleccionadoPanelId===id){
     _convenioSeleccionadoPanelId=null;
     _convenioSeleccionadoPanelNombre=null;
-    document.getElementById('lista-categorias').innerHTML='';
+    document.getElementById('lista-categorias').innerHTML='';document.getElementById('panel-escalas').innerHTML='';
     document.getElementById('panel-categorias-header').innerHTML='<div style="font-size:13px;color:var(--text3);">← Elegí un convenio para ver y editar sus categorías</div>';
   }
   showToast('🗑️ Convenio eliminado.');
   cargarPageConvenios();
+}
+
+// ─── ESCALAS POR MES (categoria_escalas / parametros_convenio / antiguedad_convenio) ───
+// Cada categoría guarda una escala por mes. Para un mes dado rige la última escala
+// cargada con fecha igual o anterior ("vigente desde"). Editar un valor crea o
+// actualiza la escala de ESE mes; los meses anteriores no se tocan.
+let _escalasMes=null;
+let _escalasCats=[];
+let _escalasEfectivas={};
+let _paramsEfectivos={};
+
+function _mesISO(){return (_escalasMes||'')+'-01';}
+function _etiquetaMes(iso){
+  const m=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const[y,mo]=String(iso).split('-');
+  return `${m[+mo-1]} ${y}`;
+}
+function _ordenCategorias(a,b){
+  const media=n=>/1\/2|media/i.test(n)?1:0;
+  return media(a.nombre)-media(b.nombre)||a.nombre.localeCompare(b.nombre,'es');
+}
+function _etiquetaVigencia(fila,iso){
+  if(!fila)return '<span style="color:var(--text3);">—</span>';
+  if(fila.periodo===iso)return '<span style="color:var(--success);font-weight:600;">✓ este mes</span>';
+  return `<span style="color:#B7791F;" title="Todavía no cargaste este mes: rige la escala anterior">desde ${_etiquetaMes(fila.periodo)}</span>`;
+}
+
+async function cargarEscalasMes(){
+  const cont=document.getElementById('panel-escalas');
+  if(!cont)return;
+  if(!_convenioSeleccionadoPanelId){cont.innerHTML='';return;}
+  if(!_escalasMes){const h=new Date();_escalasMes=`${h.getFullYear()}-${String(h.getMonth()+1).padStart(2,'0')}`;}
+  const iso=_mesISO();
+  const falta=msg=>{cont.innerHTML=`<div class="card" style="padding:14px;margin-top:12px;font-size:12px;color:var(--danger);">No se pudieron leer las escalas: ${msg}. Si todavía no creaste las tablas categoria_escalas, parametros_convenio y antiguedad_convenio en Supabase, hay que correr ese SQL primero.</div>`;};
+
+  const{data:cats,error:errC}=await sb.from('categorias_convenio').select('id,nombre').eq('convenio_id',_convenioSeleccionadoPanelId);
+  if(errC){falta(errC.message);return;}
+  _escalasCats=(cats||[]).sort(_ordenCategorias);
+  const ids=_escalasCats.map(x=>x.id);
+
+  _escalasEfectivas={};
+  if(ids.length){
+    const{data,error}=await sb.from('categoria_escalas').select('categoria_id,periodo,basico,presentismo,asig_nr,base_os_completa').in('categoria_id',ids).lte('periodo',iso).order('periodo',{ascending:false});
+    if(error){falta(error.message);return;}
+    (data||[]).forEach(f=>{if(!_escalasEfectivas[f.categoria_id])_escalasEfectivas[f.categoria_id]=f;});
+  }
+  _paramsEfectivos={};
+  const{data:pars,error:errP}=await sb.from('parametros_convenio').select('clave,periodo,valor').eq('convenio_id',_convenioSeleccionadoPanelId).lte('periodo',iso).order('periodo',{ascending:false});
+  if(errP){falta(errP.message);return;}
+  (pars||[]).forEach(q=>{if(!_paramsEfectivos[q.clave])_paramsEfectivos[q.clave]=q;});
+  const{data:antig}=await sb.from('antiguedad_convenio').select('desde_anios,hasta_anios,porcentaje_por_anio').eq('convenio_id',_convenioSeleccionadoPanelId).order('desde_anios');
+
+  const inp=(fn,valor,ancho=120)=>`<input type="text" inputmode="decimal" value="${formatearNumeroAR(valor)}" placeholder="—" style="width:${ancho}px;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;text-align:right;" onfocus="this.select()" onblur="onBlurMontoInput(this);${fn}(this.value)">`;
+  const filas=_escalasCats.map(x=>{
+    const e=_escalasEfectivas[x.id];
+    return `<tr><td>${x.nombre}</td>
+      <td>${inp(`guardarEscala('${x.id}','basico'`,e?.basico)}</td>
+      <td>${inp(`guardarEscala('${x.id}','presentismo'`,e?.presentismo,100)}</td>
+      <td>${inp(`guardarEscala('${x.id}','asig_nr'`,e?.asig_nr,100)}</td>
+      <td>${inp(`guardarEscala('${x.id}','base_os_completa'`,e?.base_os_completa)}</td>
+      <td style="font-size:12px;white-space:nowrap;">${_etiquetaVigencia(e,iso)}</td></tr>`;
+  }).join('');
+  const hayHeredadas=_escalasCats.some(x=>_escalasEfectivas[x.id]&&_escalasEfectivas[x.id].periodo!==iso);
+  const par=(clave,label)=>{
+    const q=_paramsEfectivos[clave];
+    return `<div><div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px;">${label}</div>
+      <div style="display:flex;align-items:center;gap:8px;">${inp(`guardarParametro('${clave}'`,q?.valor,120)}<span style="font-size:12px;">${_etiquetaVigencia(q,iso)}</span></div></div>`;
+  };
+  const txtAntig=(antig||[]).map(a=>`${Number(a.porcentaje_por_anio).toLocaleString('es-AR')} % por año (${a.hasta_anios>=99?`${a.desde_anios} o más`:`${a.desde_anios} a ${a.hasta_anios}`} años)`).join(' · ');
+
+  cont.innerHTML=`<div class="card" style="padding:14px;margin-top:12px;">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px;">
+      <div style="font-weight:600;color:var(--navy2);">Escalas por mes</div>
+      <input type="month" value="${_escalasMes}" onchange="cambiarMesEscalas(this.value)" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;">Rige la última escala cargada con fecha igual o anterior al mes elegido. Al editar un valor se crea o actualiza la escala de <strong>${_etiquetaMes(iso)}</strong> y los meses anteriores no cambian. Nada de esto modifica legajos ni recibos.</div>
+    ${_escalasCats.length?`<div style="overflow-x:auto;"><table><thead><tr><th>Categoría</th><th>Básico</th><th>Presentismo</th><th>Asig. no rem.</th><th>Base OS jornada completa</th><th>Vigente</th></tr></thead><tbody>${filas}</tbody></table></div>`:'<div style="font-size:13px;color:var(--text3);">Este convenio todavía no tiene categorías.</div>'}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+      ${hayHeredadas?`<button class="btn-sm btn-outline" onclick="copiarEscalasAlMes()">Crear ${_etiquetaMes(iso)} copiando los valores vigentes</button>`:''}
+      <button class="btn-sm btn-outline" onclick="aplicarEscalasComoVigentes()" title="Copia el básico y la base OS de este mes a los valores que hoy usan los legajos (tabla de arriba)">Usar este mes como valores vigentes de los legajos</button>
+    </div>
+    <div style="border-top:1px solid var(--border);margin:14px 0 10px;"></div>
+    <div style="font-weight:600;color:var(--navy2);font-size:13px;margin-bottom:8px;">Parámetros del convenio</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      ${par('ais_completa','Adicional integración social · jornada completa')}
+      ${par('ais_reducida','Adicional integración social · jornada reducida')}
+      ${par('viatico_completa','Viático por día de concurrencia · jornada completa')}
+      ${par('viatico_reducida','Viático por día de concurrencia · jornada reducida')}
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-top:12px;"><strong>Antigüedad:</strong> ${txtAntig||'sin tasas cargadas'}.</div>
+  </div>`;
+}
+
+function cambiarMesEscalas(valor){
+  if(!valor)return;
+  _escalasMes=valor;
+  cargarEscalasMes();
+}
+
+async function guardarEscala(catId,campo,valorStr){
+  const nuevo=parsearNumeroAR(valorStr);
+  const ef=_escalasEfectivas[catId]||{};
+  const actual=ef[campo]!=null?Number(ef[campo]):null;
+  if((actual==null&&nuevo==null)||(actual!=null&&nuevo!=null&&Math.abs(actual-nuevo)<0.005))return;
+  const fila={basico:ef.basico??null,presentismo:ef.presentismo??null,asig_nr:ef.asig_nr??null,base_os_completa:ef.base_os_completa??null};
+  fila[campo]=nuevo;
+  if(fila.basico==null){alert('Cargá primero el básico de este mes para esta categoría.');await cargarEscalasMes();return;}
+  const{error}=await sb.from('categoria_escalas').upsert({categoria_id:catId,periodo:_mesISO(),...fila},{onConflict:'categoria_id,periodo'});
+  if(error){alert('No se pudo guardar la escala: '+error.message);await cargarEscalasMes();return;}
+  showToast('✅ Escala guardada.');
+  await cargarEscalasMes();
+}
+
+async function guardarParametro(clave,valorStr){
+  const nuevo=parsearNumeroAR(valorStr);
+  const ef=_paramsEfectivos[clave];
+  const actual=ef?Number(ef.valor):null;
+  if((actual==null&&nuevo==null)||(actual!=null&&nuevo!=null&&Math.abs(actual-nuevo)<0.005))return;
+  if(nuevo==null){alert('El valor no puede quedar vacío.');await cargarEscalasMes();return;}
+  const{error}=await sb.from('parametros_convenio').upsert({convenio_id:_convenioSeleccionadoPanelId,clave,periodo:_mesISO(),valor:nuevo},{onConflict:'convenio_id,clave,periodo'});
+  if(error){alert('No se pudo guardar el parámetro: '+error.message);await cargarEscalasMes();return;}
+  showToast('✅ Parámetro guardado.');
+  await cargarEscalasMes();
+}
+
+async function copiarEscalasAlMes(){
+  const iso=_mesISO();
+  const pend=_escalasCats.filter(x=>{const e=_escalasEfectivas[x.id];return e&&e.periodo!==iso;});
+  if(!pend.length){alert('Todas las categorías ya tienen escala propia en este mes.');return;}
+  if(!confirm(`Se va a crear la escala de ${_etiquetaMes(iso)} para ${pend.length} categoría(s), copiando los valores vigentes. Después los modificás con los nuevos importes.`))return;
+  const filas=pend.map(x=>{const e=_escalasEfectivas[x.id];return{categoria_id:x.id,periodo:iso,basico:e.basico,presentismo:e.presentismo,asig_nr:e.asig_nr,base_os_completa:e.base_os_completa};});
+  const{error}=await sb.from('categoria_escalas').upsert(filas,{onConflict:'categoria_id,periodo'});
+  if(error){alert('No se pudo crear la escala: '+error.message);return;}
+  showToast(`✅ Escala de ${_etiquetaMes(iso)} creada.`);
+  await cargarEscalasMes();
+}
+
+async function aplicarEscalasComoVigentes(){
+  const iso=_mesISO();
+  const items=_escalasCats.map(x=>({cat:x,e:_escalasEfectivas[x.id]})).filter(i=>i.e);
+  if(!items.length){alert('No hay escalas cargadas para este mes.');return;}
+  if(!confirm(`Se van a copiar el básico (y la base de obra social, donde hay) de ${_etiquetaMes(iso)} a los valores vigentes que hoy usan los legajos (la tabla de arriba), en ${items.length} categoría(s).\n\nNo modifica ningún legajo ni recibo: para pasarlo a los legajos usás después el botón ↻ de cada fila.`))return;
+  let hechas=0;
+  for(const{cat,e}of items){
+    const cambios={sueldo_basico:Number(e.basico)};
+    if(e.base_os_completa!=null)cambios.base_os_completa=Number(e.base_os_completa);
+    const{error}=await sb.from('categorias_convenio').update(cambios).eq('id',cat.id);
+    if(error){alert(`No se pudo actualizar "${cat.nombre}": ${error.message}`);break;}
+    hechas++;
+  }
+  showToast(`✅ ${hechas} categoría(s) actualizadas.`);
+  await cargarListaCategoriasPanel();
 }
 
 // ─── CATÁLOGO DE OBRAS SOCIALES ───
@@ -3507,6 +3660,7 @@ async function seleccionarConvenioEnPanel(id,nombre){
     </div>`;
   cargarPageConvenios();
   await cargarListaCategoriasPanel();
+  await cargarEscalasMes();
 }
 
 function formatearNumeroAR(v){
