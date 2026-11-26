@@ -4985,7 +4985,7 @@ function _clasificarCategoriaSOS(r){
     return{clave:null,motivo:'horas no reconocidas'};
   }
   const m=/coord\.?\s*"?([abc])"?/.exec(cat);
-  if(m)return{clave:'coord-'+m[1]};
+  if(m)return{clave:'coord-'+m[1]+(horas<=120?'-media':'')};
   return{clave:null,motivo:r.catTexto||'sin categoría'};
 }
 
@@ -4993,9 +4993,13 @@ function _clasificarCategoriaSOS(r){
 function _categoriaDeConvenio(clave,cats){
   const n=x=>normalizarTexto(x||'');
   let f=null;
-  if(clave==='oficial-media')f=s=>/oficial/.test(s)&&/(1\/2|media)/.test(s);
-  else if(clave==='oficial-completa')f=s=>/oficial/.test(s)&&/completa/.test(s);
-  else{const m=/^coord-([abc])$/.exec(clave||'');if(m)f=s=>new RegExp('^coordinador\\s*'+m[1]+'$').test(s);}
+  // "Oficial de Primera" es otra categoría: no debe confundirse con "Oficial".
+  if(clave==='oficial-media')f=s=>/oficial/.test(s)&&!/primera/.test(s)&&/(1\/2|media)/.test(s);
+  else if(clave==='oficial-completa')f=s=>/oficial/.test(s)&&!/primera/.test(s)&&/completa/.test(s);
+  else{
+    const m=/^coord-([abc])(-media)?$/.exec(clave||'');
+    if(m)f=m[2]?(s=>new RegExp('^coordinador\\s*'+m[1]+'\\s*(1\\/2|media)').test(s)):(s=>new RegExp('^coordinador\\s*'+m[1]+'$').test(s));
+  }
   if(!f)return null;
   const hit=(cats||[]).filter(x=>f(n(x.nombre)));
   return hit.length===1?hit[0].nombre:null;
