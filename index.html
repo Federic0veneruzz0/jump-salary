@@ -400,6 +400,10 @@ tr:last-child td{border-bottom:none;}
             <label style="display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:normal;font-weight:400;color:var(--text);cursor:pointer;"><input type="checkbox" id="chk-sos-leg" checked style="width:15px;height:15px;margin:0;"> Número de legajo</label>
             <label style="display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:normal;font-weight:400;color:var(--text);cursor:pointer;"><input type="checkbox" id="chk-sos-os" checked style="width:15px;height:15px;margin:0;"> Obra social (el código se traduce con el catálogo)</label>
             <label style="display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:normal;font-weight:400;color:var(--text);cursor:pointer;"><input type="checkbox" id="chk-sos-dom" style="width:15px;height:15px;margin:0;"> Domicilio</label>
+            <label style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;text-transform:none;letter-spacing:normal;font-weight:400;color:var(--text);cursor:pointer;"><input type="checkbox" id="chk-sos-cat" style="width:15px;height:15px;margin:0;"> Convenio y categoría según jornada (media / completa), solo en legajos sin categoría:
+              <select id="sel-sos-convenio" onclick="event.stopPropagation()" style="padding:4px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;"><option value="">— elegí el convenio —</option></select></label>
+            <label style="display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:normal;font-weight:400;color:var(--text);cursor:pointer;"><input type="checkbox" id="chk-sos-f931" checked style="width:15px;height:15px;margin:0;"> Datos para el F.931 (nacionalidad, sexo, cónyuge, hijos, horas y códigos)</label>
+            <label style="display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:normal;font-weight:400;color:var(--text);cursor:pointer;"><input type="checkbox" id="chk-sos-sueldo" checked style="width:15px;height:15px;margin:0;"> Sueldo básico (el "Valor Sueldo" de SOS)</label>
           </div>
           <button class="btn btn-primary" id="btn-revisar-legajos-sos" onclick="revisarLegajosSOS()" style="width:auto;padding:10px 24px;">Revisar y completar legajos</button>
         </div>
@@ -876,6 +880,63 @@ tr:last-child td{border-bottom:none;}
         </div>
       </div>
     </details>
+    <details style="margin-bottom:8px;">
+      <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--navy2);text-transform:uppercase;letter-spacing:.04em;">5. Datos para el F.931 / Libro de Sueldos (opcional)</summary>
+      <div style="font-size:11px;color:var(--text3);margin:6px 0 0;">Datos personales y códigos que se necesitan para presentar la declaración jurada. Quedan solo en el legajo (ven esto el contador y el empleador de la empresa, no los empleados).</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;">
+        <div class="field" style="margin-bottom:0;">
+          <label>Nacionalidad</label>
+          <input type="text" id="legajo-nacionalidad" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Sexo</label>
+          <select id="legajo-sexo" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;"><option value="">—</option><option value="F">F</option><option value="M">M</option></select>
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Cónyuge</label>
+          <select id="legajo-conyuge" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;"><option value="">—</option><option value="si">Sí</option><option value="no">No</option></select>
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Hijos</label>
+          <input type="number" min="0" id="legajo-hijos" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Adherentes</label>
+          <input type="number" min="0" id="legajo-adherentes" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Horas mensuales <span style="font-weight:400;color:var(--text3);font-size:11px;">(100 = media jornada)</span></label>
+          <input type="number" min="0" id="legajo-horas-mensuales" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Modalidad de contratación (código)</label>
+          <input type="text" id="legajo-cod-modalidad" list="dl-modalidades" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Condición (código)</label>
+          <input type="text" id="legajo-cod-condicion" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Actividad (código)</label>
+          <input type="text" id="legajo-cod-actividad" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Zona (código)</label>
+          <input type="text" id="legajo-cod-zona" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Siniestrado (código)</label>
+          <input type="text" id="legajo-cod-siniestrado" placeholder="0 = no incapacitado" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+        </div>
+      </div>
+    </details>
+    <datalist id="dl-modalidades">
+      <option value="1">A tiempo parcial: indeterminado / permanente</option>
+      <option value="8">A tiempo completo indeterminado / trabajo permanente</option>
+      <option value="14">Nuevo período de prueba</option>
+      <option value="21">A tiempo parcial determinado (contrato a plazo fijo)</option>
+      <option value="99">LRT (directores SA, municipios, etc.)</option>
+    </datalist>
     <datalist id="datalist-obras-sociales"></datalist>
 
     <div class="modal-actions" style="margin-top:18px;">
@@ -1760,6 +1821,18 @@ async function initContador(){
   }
 }
 
+// Firmas (constancias) de una lista de recibos. Se consulta por tandas: una sola
+// consulta con cientos de IDs se vuelve demasiado larga y puede fallar sin avisar,
+// con lo cual todos los recibos aparecerían como "pendientes".
+async function _constanciasDeRecibos(ids,campos='recibo_id,fecha_firma'){
+  const out=[];
+  await Promise.all(_enLotes(ids||[],150).map(async lote=>{
+    const{data}=await sb.from('constancias').select(campos).in('recibo_id',lote);
+    if(data)out.push(...data);
+  }));
+  return out;
+}
+
 // PostgREST devuelve como máximo 1000 filas por consulta: esto las junta todas.
 async function _traerTodas(armarConsulta){
   const out=[];
@@ -2006,7 +2079,7 @@ async function cargarRecibosContador(){
     const nomB=b.empleados?.nombre||'';
     return nomA.localeCompare(nomB,'es',{sensitivity:'base'});
   });
-  const{data:constancias}=recibos?.length?await sb.from('constancias').select('recibo_id,fecha_firma').in('recibo_id',recibos.map(r=>r.id)):{data:[]};
+  const constancias=await _constanciasDeRecibos((recibos||[]).map(r=>r.id));
   const firmaPorRecibo={};
   constancias?.forEach(c=>{firmaPorRecibo[c.recibo_id]=c.fecha_firma;});
   const puedeEliminarRecibos=currentUser.es_admin===true||currentUser.es_admin==='true'||adminOriginal!==null;
@@ -2383,7 +2456,7 @@ async function cargarRecibosEmpleador(){
 
   const borradores=recibos?.filter(r=>r.estado==='borrador')||[];
   const publicados=recibos?.filter(r=>r.estado==='publicado')||[];
-  const{data:constancias}=recibos?.length?await sb.from('constancias').select('recibo_id,fecha_firma').in('recibo_id',recibos.map(r=>r.id)):{data:[]};
+  const constancias=await _constanciasDeRecibos((recibos||[]).map(r=>r.id));
   const firmaPorRecibo={};
   constancias?.forEach(c=>{firmaPorRecibo[c.recibo_id]=c.fecha_firma;});
   const firmadosIds=new Set(constancias?.map(c=>c.recibo_id)||[]);
@@ -2865,7 +2938,7 @@ async function cargarRecibosEmpleado(){
   let q=sb.from('recibos').select('*').in('empleado_id',idsEmpleado).eq('estado','publicado').order('created_at',{ascending:false});
   if(periodoSeleccionado&&periodosDisponibles.includes(periodoSeleccionado))q=q.eq('periodo',periodoSeleccionado);
   const{data:recibos}=await q;
-  const{data:constancias}=recibos?.length?await sb.from('constancias').select('recibo_id').in('recibo_id',recibos.map(r=>r.id)):{data:[]};
+  const constancias=await _constanciasDeRecibos((recibos||[]).map(r=>r.id),'recibo_id');
   const firmadosIds=new Set(constancias?.map(c=>c.recibo_id)||[]);
 
   if(!recibos?.length){document.getElementById('lista-recibos-empleado').innerHTML=`<div class="empty"><div class="empty-icon">📭</div><div class="empty-title">Sin recibos disponibles</div><div class="empty-sub">Cuando tu empleador apruebe tus recibos van a aparecer acá.</div></div>`;return;}
@@ -3990,7 +4063,7 @@ async function abrirLegajoEmpleado(empleadoId,nombre){
   if(!empId){alert('No se pudo determinar la empresa. Volvé a intentarlo.');return;}
   _legajoEmpleadoId=empleadoId;
   document.getElementById('legajo-empleado-title').textContent=`Legajo — ${nombre}`;
-  const campos=['numero','fecha-nacimiento','situacion','basico','base-os','os','banco','cbu','domicilio'];
+  const campos=['numero','fecha-nacimiento','situacion','basico','base-os','os','banco','cbu','domicilio','nacionalidad','sexo','conyuge','hijos','adherentes','horas-mensuales','cod-modalidad','cod-condicion','cod-actividad','cod-zona','cod-siniestrado'];
   campos.forEach(c=>{const el=document.getElementById('legajo-'+c);if(el)el.value=c==='situacion'?'activo':'';});
   document.getElementById('legajo-afiliado').checked=false;
   document.getElementById('legajo-fecha-nacimiento').max=new Date().toISOString().slice(0,10);
@@ -4008,6 +4081,17 @@ async function abrirLegajoEmpleado(empleadoId,nombre){
   if(legajo){
     document.getElementById('legajo-numero').value=legajo.numero_legajo||'';
     document.getElementById('legajo-fecha-nacimiento').value=legajo.fecha_nacimiento||'';
+    document.getElementById('legajo-nacionalidad').value=legajo.nacionalidad||'';
+    document.getElementById('legajo-sexo').value=legajo.sexo||'';
+    document.getElementById('legajo-conyuge').value=legajo.conyuge===true?'si':legajo.conyuge===false?'no':'';
+    document.getElementById('legajo-hijos').value=legajo.hijos??'';
+    document.getElementById('legajo-adherentes').value=legajo.adherentes??'';
+    document.getElementById('legajo-horas-mensuales').value=legajo.horas_mensuales??'';
+    document.getElementById('legajo-cod-modalidad').value=legajo.cod_modalidad||'';
+    document.getElementById('legajo-cod-condicion').value=legajo.cod_condicion||'';
+    document.getElementById('legajo-cod-actividad').value=legajo.cod_actividad||'';
+    document.getElementById('legajo-cod-zona').value=legajo.cod_zona||'';
+    document.getElementById('legajo-cod-siniestrado').value=legajo.cod_siniestrado||'';
     document.getElementById('legajo-situacion').value=legajo.situacion_revista||'activo';
     document.getElementById('legajo-basico').value=formatearNumeroAR(legajo.sueldo_basico);
     document.getElementById('legajo-base-os').value=formatearNumeroAR(legajo.base_obra_social);
@@ -4065,6 +4149,17 @@ async function guardarLegajo(){
       cbu:document.getElementById('legajo-cbu').value.trim()||null,
       domicilio:document.getElementById('legajo-domicilio').value.trim()||null,
       afiliado_sindicato:document.getElementById('legajo-afiliado').checked,
+      nacionalidad:document.getElementById('legajo-nacionalidad').value.trim()||null,
+      sexo:document.getElementById('legajo-sexo').value||null,
+      conyuge:{si:true,no:false}[document.getElementById('legajo-conyuge').value]??null,
+      hijos:_enteroOnull(document.getElementById('legajo-hijos').value),
+      adherentes:_enteroOnull(document.getElementById('legajo-adherentes').value),
+      horas_mensuales:_enteroOnull(document.getElementById('legajo-horas-mensuales').value),
+      cod_modalidad:document.getElementById('legajo-cod-modalidad').value.trim()||null,
+      cod_condicion:document.getElementById('legajo-cod-condicion').value.trim()||null,
+      cod_actividad:document.getElementById('legajo-cod-actividad').value.trim()||null,
+      cod_zona:document.getElementById('legajo-cod-zona').value.trim()||null,
+      cod_siniestrado:document.getElementById('legajo-cod-siniestrado').value.trim()||null,
     };
     const{data:existe}=await sb.from('legajo_empleado').select('id').eq('empleado_id',_legajoEmpleadoId).maybeSingle();
     let error;
@@ -4821,6 +4916,13 @@ function parseARCAtxt(text){
 let _legajosSOS=null;
 
 // "dd/mm/aaaa" -> "aaaa-mm-dd" (null si no es una fecha real o no es razonable)
+function _enteroOnull(v){
+  const s=String(v??'').trim();
+  if(s==='')return null;
+  const n=parseInt(s,10);
+  return isNaN(n)?null:n;
+}
+
 function fechaSOSaISO(s){
   const m=/^(\d{2})\/(\d{2})\/(\d{4})$/.exec((s||'').trim());
   if(!m)return null;
@@ -4840,7 +4942,10 @@ function parseLegajosSOS(html){
   const cols=filas[hi];
   const i=n=>cols.indexOf(n);
   const ix={cuit:i('CUIT Empresa'),leg:i('Legajo'),cuil:i('CUIL'),nom:i('Apellido y Nombre'),nac:i('Fecha de Nacimiento'),
-            dom:i('Domicilio'),loc:i('Localidad'),cp:i('CP'),prov:i('Provincia'),osTxt:i('Obra Social'),osCod:i('Cod Obra Social')};
+            dom:i('Domicilio'),loc:i('Localidad'),cp:i('CP'),prov:i('Provincia'),osTxt:i('Obra Social'),osCod:i('Cod Obra Social'),
+            cat:i('Categoria'),horas:i('Horas Mensuales'),tarea:i('Tarea'),
+            nacion:i('Nacionalidad'),sexo:i('Sexo'),cony:i('Conyuge'),hijos:i('Hijos'),adh:i('Adherentes'),
+            cMod:i('Cod Modalidad Contratacion'),cCond:i('Cod Condicion'),cAct:i('Cod Actividad'),cZona:i('Cod Zona'),cSin:i('Cod Siniestrado'),sueldo:i('Valor Sueldo')};
   if(ix.cuit<0||ix.cuil<0||ix.nac<0)return null;
   const g=(f,k)=>ix[k]>=0?(f[ix[k]]||'').trim():'';
   return filas.slice(hi+1).filter(f=>nc(g(f,'cuil')).length===11).map(f=>{
@@ -4849,20 +4954,72 @@ function parseLegajosSOS(html){
       cuitEmpresa:nc(g(f,'cuit')),cuil:nc(g(f,'cuil')),nombre:g(f,'nom'),legajo:g(f,'leg'),
       nacimiento:fechaSOSaISO(g(f,'nac')),
       domicilio:dom?`${dom}${loc?`, ${loc}`:''}${cp?` (CP ${cp})`:''}${prov?`, ${prov}`:''}`:'',
-      codOS:g(f,'osCod'),textoOS:g(f,'osTxt')
+      codOS:g(f,'osCod'),textoOS:g(f,'osTxt'),
+      catTexto:g(f,'cat'),horas:g(f,'horas'),tarea:g(f,'tarea'),
+      nacionalidad:g(f,'nacion'),
+      sexo:['M','F'].includes(g(f,'sexo').toUpperCase())?g(f,'sexo').toUpperCase():'',
+      conyuge:{true:true,false:false}[g(f,'cony').toLowerCase()]??null,
+      hijos:_enteroOnull(g(f,'hijos')),adherentes:_enteroOnull(g(f,'adh')),horasNum:_enteroOnull(g(f,'horas')),
+      codMod:g(f,'cMod'),codCond:g(f,'cCond'),codAct:g(f,'cAct'),codZona:g(f,'cZona'),codSin:g(f,'cSin'),
+      sueldo:parseFloat(g(f,'sueldo'))>0?parseFloat(g(f,'sueldo')):null
     };
   });
+}
+
+async function poblarConveniosSOS(){
+  const sel=document.getElementById('sel-sos-convenio');
+  if(!sel)return;
+  await cargarConveniosCatalogo();
+  sel.innerHTML='<option value="">— elegí el convenio —</option>'+_conveniosCache.map(v=>`<option value="${v.id}">${v.nombre}</option>`).join('');
+  if(_conveniosCache.length===1)sel.value=_conveniosCache[0].id;
+}
+
+// Qué categoría de Jump Salary corresponde a una fila del listado. La jornada sale de
+// "Horas Mensuales" (100 = media, 186 = completa), que es más confiable que "Tarea".
+function _clasificarCategoriaSOS(r){
+  const cat=normalizarTexto(r.catTexto||'');
+  const horas=parseInt(r.horas,10);
+  if(/oficial|maetranza|maestranza/.test(cat)){
+    if(horas<=120)return{clave:'oficial-media'};
+    if(horas>=170)return{clave:'oficial-completa'};
+    return{clave:null,motivo:'horas no reconocidas'};
+  }
+  const m=/coord\.?\s*"?([abc])"?/.exec(cat);
+  if(m)return{clave:'coord-'+m[1]};
+  return{clave:null,motivo:r.catTexto||'sin categoría'};
+}
+
+// Busca esa categoría (por nombre) entre las del convenio elegido; solo si hay una sola.
+function _categoriaDeConvenio(clave,cats){
+  const n=x=>normalizarTexto(x||'');
+  let f=null;
+  if(clave==='oficial-media')f=s=>/oficial/.test(s)&&/(1\/2|media)/.test(s);
+  else if(clave==='oficial-completa')f=s=>/oficial/.test(s)&&/completa/.test(s);
+  else{const m=/^coord-([abc])$/.exec(clave||'');if(m)f=s=>new RegExp('^coordinador\\s*'+m[1]+'$').test(s);}
+  if(!f)return null;
+  const hit=(cats||[]).filter(x=>f(n(x.nombre)));
+  return hit.length===1?hit[0].nombre:null;
 }
 
 async function revisarLegajosSOS(){
   if(!_legajosSOS?.length){alert('Primero subí el Listado de legajos de SOS Contador.');return;}
   const op={nac:document.getElementById('chk-sos-nac').checked,leg:document.getElementById('chk-sos-leg').checked,
-            os:document.getElementById('chk-sos-os').checked,dom:document.getElementById('chk-sos-dom').checked};
-  if(!op.nac&&!op.leg&&!op.os&&!op.dom){alert('Tildá al menos un dato para completar.');return;}
+            os:document.getElementById('chk-sos-os').checked,dom:document.getElementById('chk-sos-dom').checked,cat:document.getElementById('chk-sos-cat').checked,
+            f931:document.getElementById('chk-sos-f931').checked,sueldo:document.getElementById('chk-sos-sueldo').checked};
+  if(!op.nac&&!op.leg&&!op.os&&!op.dom&&!op.cat&&!op.f931&&!op.sueldo){alert('Tildá al menos un dato para completar.');return;}
   const btn=document.getElementById('btn-revisar-legajos-sos');
   const txtBtn=btn.textContent;btn.disabled=true;btn.textContent='Revisando...';
   try{
     await poblarDatalistObrasSociales();
+    let convObj=null,catsConv=[];
+    if(op.cat){
+      const idConv=document.getElementById('sel-sos-convenio').value;
+      convObj=_conveniosCache.find(v=>String(v.id)===String(idConv));
+      if(!convObj){alert('Elegí el convenio que corresponde a estos legajos (al lado de "Convenio y categoría").');return;}
+      const{data:cats,error:errCats}=await sb.from('categorias_convenio').select('nombre').eq('convenio_id',convObj.id);
+      if(errCats){alert('No se pudieron leer las categorías del convenio: '+errCats.message);return;}
+      catsConv=cats||[];
+    }
     // Empresas del archivo (por CUIT) dentro de tu estudio
     const cuits=[...new Set(_legajosSOS.map(r=>r.cuitEmpresa))];
     const{data:empresas,error:errEmp}=await sb.from('empresas').select('id,nombre,cuit').in('cuit',cuits);
@@ -4880,14 +5037,17 @@ async function revisarLegajosSOS(){
     // Legajos ya existentes
     const idsEmp=Object.values(empleadoPorClave).map(x=>x.id);
     const legajoPorEmp={};
+    const colsLeg=['empleado_id','numero_legajo','fecha_nacimiento','domicilio','obra_social','convenio','categoria'];
+    if(op.f931)colsLeg.push('nacionalidad','sexo','conyuge','hijos','adherentes','cod_modalidad','cod_condicion','cod_actividad','cod_zona','cod_siniestrado','horas_mensuales');
+    if(op.sueldo)colsLeg.push('sueldo_basico');
     for(const lote of _enLotes(idsEmp,80)){
-      const{data,error}=await sb.from('legajo_empleado').select('empleado_id,numero_legajo,fecha_nacimiento,domicilio,obra_social').in('empleado_id',lote);
+      const{data,error}=await sb.from('legajo_empleado').select(colsLeg.join(',')).in('empleado_id',lote);
       if(error){alert('No se pudieron leer los legajos: '+error.message);return;}
       data?.forEach(l=>{legajoPorEmp[l.empleado_id]=l;});
     }
 
-    const cuenta={nac:{ok:0,ya:0,sin:0},leg:{ok:0,ya:0,sin:0},os:{ok:0,ya:0,sin:0},dom:{ok:0,ya:0,sin:0}};
-    const noEncontrados=[],sinCatalogo={},plan=[];
+    const cuenta={nac:{ok:0,ya:0,sin:0},leg:{ok:0,ya:0,sin:0},os:{ok:0,ya:0,sin:0},dom:{ok:0,ya:0,sin:0},cat:{ok:0,ya:0,sin:0},f931:{ok:0,ya:0,sin:0},sueldo:{ok:0,ya:0,sin:0}};
+    const noEncontrados=[],sinCatalogo={},plan=[],sinCategoria=[],avisosJornada=[];
     const nombreEmpresa=empresas.map(e=>e.nombre).join(', ');
     for(const r of _legajosSOS){
       const emp=empresaPorCuit[r.cuitEmpresa];
@@ -4904,6 +5064,31 @@ async function revisarLegajosSOS(){
       evaluar('nac',r.nacimiento,leg?.fecha_nacimiento,'fecha_nacimiento');
       evaluar('leg',r.legajo,leg?.numero_legajo,'numero_legajo');
       evaluar('dom',r.domicilio,leg?.domicilio,'domicilio');
+      if(op.cat){
+        const cl=_clasificarCategoriaSOS(r);
+        const nombreCat=cl.clave?_categoriaDeConvenio(cl.clave,catsConv):null;
+        const tarea=normalizarTexto(r.tarea||''),horas=parseInt(r.horas,10);
+        if((tarea.includes('completa')&&horas<=120)||(tarea.includes('media')&&horas>=170))avisosJornada.push(r.nombre);
+        if(leg?.categoria||(leg?.convenio&&leg.convenio!==convObj.nombre)){cuenta.cat.ya++;}
+        else if(!nombreCat){cuenta.cat.sin++;sinCategoria.push(`${r.nombre} (${cl.clave?'ese tipo de categoría no está en el convenio':cl.motivo})`);}
+        else{cambios.convenio=convObj.nombre;cambios.categoria=nombreCat;cuenta.cat.ok++;}
+      }
+      if(op.f931){
+        [['nacionalidad',r.nacionalidad],['sexo',r.sexo],['conyuge',r.conyuge],['hijos',r.hijos],['adherentes',r.adherentes],
+         ['cod_modalidad',r.codMod],['cod_condicion',r.codCond],['cod_actividad',r.codAct],['cod_zona',r.codZona],
+         ['cod_siniestrado',r.codSin],['horas_mensuales',r.horasNum]].forEach(([campo,valor])=>{
+          const actual=leg?.[campo];
+          if(actual!=null&&actual!=='')cuenta.f931.ya++;
+          else if(valor==null||valor==='')cuenta.f931.sin++;
+          else{cambios[campo]=valor;cuenta.f931.ok++;}
+        });
+      }
+      if(op.sueldo){
+        const actual=leg?.sueldo_basico;
+        if(actual!=null&&actual!=='')cuenta.sueldo.ya++;
+        else if(r.sueldo==null)cuenta.sueldo.sin++;
+        else{cambios.sueldo_basico=r.sueldo;cuenta.sueldo.ok++;}
+      }
       if(op.os){
         const nombreOS=r.codOS?resolverNombreObraSocial(r.codOS):'';
         const resuelta=!!nombreOS&&nombreOS!==r.codOS;
@@ -4916,11 +5101,16 @@ async function revisarLegajosSOS(){
     if(op.nac)lineas.push(`• Fecha de nacimiento: ${cuenta.nac.ok} a completar (${cuenta.nac.ya} ya la tenían, ${cuenta.nac.sin} sin dato en el archivo)`);
     if(op.leg)lineas.push(`• Número de legajo: ${cuenta.leg.ok} a completar (${cuenta.leg.ya} ya lo tenían)`);
     if(op.os)lineas.push(`• Obra social: ${cuenta.os.ok} a completar (${cuenta.os.ya} ya la tenían, ${cuenta.os.sin} sin dato o con código que no está en el catálogo)`);
+    if(op.cat)lineas.push(`• Convenio y categoría: ${cuenta.cat.ok} a asignar (${cuenta.cat.ya} ya tenían categoría u otro convenio, ${cuenta.cat.sin} sin categoría equivalente)`);
+    if(op.f931)lineas.push(`• Datos F.931: ${cuenta.f931.ok} valores a completar (${cuenta.f931.ya} ya cargados, ${cuenta.f931.sin} vacíos en el archivo)`);
+    if(op.sueldo)lineas.push(`• Sueldo básico: ${cuenta.sueldo.ok} a completar (${cuenta.sueldo.ya} ya lo tenían, ${cuenta.sueldo.sin} sin dato)`);
     if(op.dom)lineas.push(`• Domicilio: ${cuenta.dom.ok} a completar (${cuenta.dom.ya} ya lo tenían, ${cuenta.dom.sin} sin dato en el archivo)`);
     const codigos=Object.keys(sinCatalogo);
     const msg=`Archivo de ${nombreEmpresa}: ${_legajosSOS.length} legajos. Encontrados en Jump Salary: ${_legajosSOS.length-noEncontrados.length}.`
       +(noEncontrados.length?`\n\nNo encontrados (no se tocan): ${noEncontrados.slice(0,8).join(', ')}${noEncontrados.length>8?` y ${noEncontrados.length-8} más`:''}.`:'')
       +`\n\nSe completan solo campos vacíos:\n${lineas.join('\n')}`
+      +(sinCategoria.length?`\n\nSin categoría equivalente (no se tocan): ${sinCategoria.slice(0,6).join('; ')}${sinCategoria.length>6?` y ${sinCategoria.length-6} más`:''}.`:'')
+      +(avisosJornada.length?`\n\nRevisar en SOS Contador (la Tarea no coincide con las horas): ${avisosJornada.join(', ')}.`:'')
       +(codigos.length?`\n\nCódigos de obra social que no están en tu catálogo (cargalos en Convenios → Obras Sociales con nombre y código y repetí este paso): ${codigos.join(', ')}.`:'')
       +`\n\n${plan.length?`Se van a actualizar ${plan.length} legajo(s). ¿Aplicar?`:'No hay nada para completar.'}`;
     if(!plan.length){alert(msg);return;}
@@ -4976,6 +5166,7 @@ function setupUploads(){
       if(!_legajosSOS){dz.classList.remove('loaded');dz.querySelector('.upload-sub').textContent='⚠️ No parece un Listado de legajos de SOS Contador';return;}
       dz.classList.add('loaded');
       dz.querySelector('.upload-sub').textContent=`✅ ${_legajosSOS.length} legajos leídos de "${f.name}"`;
+      poblarConveniosSOS();
     };
     r.readAsText(f,'UTF-8');
   });
