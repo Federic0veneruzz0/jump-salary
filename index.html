@@ -1760,6 +1760,18 @@ async function initContador(){
   }
 }
 
+// PostgREST devuelve como máximo 1000 filas por consulta: esto las junta todas.
+async function _traerTodas(armarConsulta){
+  const out=[];
+  for(let desde=0;;desde+=1000){
+    const{data,error}=await armarConsulta().range(desde,desde+999);
+    if(error||!data?.length)break;
+    out.push(...data);
+    if(data.length<1000)break;
+  }
+  return out;
+}
+
 async function cargarDashboardContador(){
   const estudioId=currentUser.estudio_id;
   let qEmp=sb.from('empresas').select('id,nombre,cuit').eq('activa',true).eq('estudio_id',estudioId).order('nombre');
@@ -1767,18 +1779,20 @@ async function cargarDashboardContador(){
   const{data:empresas}=await qEmp;
   const empresaIds=empresas?.map(e=>e.id)||[];
   const{data:empleados}=empresaIds.length?await sb.from('empleados').select('id').in('empresa_id',empresaIds).eq('activo',true):{data:[]};
-  let reciboIds=[];
-  if(empresaIds.length){
-    const{data:recibosData}=await sb.from('recibos').select('id').in('empresa_id',empresaIds);
-    reciboIds=recibosData?.map(r=>r.id)||[];
-  }
-  const{data:firmados}=reciboIds.length?await sb.from('constancias').select('id').in('recibo_id',reciboIds):{data:[]};
-  const{data:publicados}=empresaIds.length?await sb.from('recibos').select('id').in('empresa_id',empresaIds).eq('estado','publicado'):{data:[]};
+  // Firmados y pendientes se miden sobre los recibos PUBLICADOS: firmados = los que
+  // tienen constancia, pendientes = el resto (firmados + pendientes = publicados).
+  const publicados=empresaIds.length?await _traerTodas(()=>sb.from('recibos').select('id').in('empresa_id',empresaIds).eq('estado','publicado').order('id')):[];
+  const idsPublicados=publicados.map(r=>r.id);
+  const firmadosSet=new Set();
+  await Promise.all(_enLotes(idsPublicados,150).map(async lote=>{
+    const{data}=await sb.from('constancias').select('recibo_id').in('recibo_id',lote);
+    data?.forEach(k=>firmadosSet.add(k.recibo_id));
+  }));
 
   document.getElementById('st-empresas').textContent=empresas?.length||0;
   document.getElementById('st-empleados').textContent=empleados?.length||0;
-  document.getElementById('st-firmados').textContent=firmados?.length||0;
-  document.getElementById('st-pendientes').textContent=publicados?.length||0;
+  document.getElementById('st-firmados').textContent=firmadosSet.size;
+  document.getElementById('st-pendientes').textContent=idsPublicados.length-firmadosSet.size;
 
   await cargarEmpresasDeBaja();
 
