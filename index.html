@@ -777,6 +777,7 @@ tr:last-child td{border-bottom:none;}
       <button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-plantilla-empleado')">Cancelar</button>
       <button class="btn-sm btn-outline" style="flex:1;" onclick="verVistaPreviaPlantilla()">👁️ Vista previa</button>
       <button class="btn-sm btn-gold" id="btn-guardar-plantilla" style="flex:1;" onclick="guardarPlantilla()">💾 Guardar plantilla</button>
+      <button class="btn-sm btn-gold" id="btn-generar-recibo-plantilla" style="flex:1;" onclick="generarReciboDesdePlantilla()">🧾 Generar recibo</button>
     </div>
   </div>
 </div>
@@ -911,33 +912,36 @@ tr:last-child td{border-bottom:none;}
         </div>
         <div class="field" style="margin-bottom:0;">
           <label>Modalidad de contratación (código)</label>
-          <input type="text" id="legajo-cod-modalidad" list="dl-modalidades" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+          <input oninput="mostrarDescCodigoF931(this)" type="text" id="legajo-cod-modalidad" list="dl-modalidades" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+          <div id="legajo-cod-modalidad-desc" style="font-size:11px;color:var(--text3);margin-top:3px;min-height:14px;"></div>
         </div>
         <div class="field" style="margin-bottom:0;">
           <label>Condición (código)</label>
-          <input type="text" id="legajo-cod-condicion" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+          <input oninput="mostrarDescCodigoF931(this)" type="text" id="legajo-cod-condicion" list="dl-condiciones" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+          <div id="legajo-cod-condicion-desc" style="font-size:11px;color:var(--text3);margin-top:3px;min-height:14px;"></div>
         </div>
         <div class="field" style="margin-bottom:0;">
           <label>Actividad (código)</label>
-          <input type="text" id="legajo-cod-actividad" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+          <input oninput="mostrarDescCodigoF931(this)" type="text" id="legajo-cod-actividad" list="dl-actividades" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+          <div id="legajo-cod-actividad-desc" style="font-size:11px;color:var(--text3);margin-top:3px;min-height:14px;"></div>
         </div>
         <div class="field" style="margin-bottom:0;">
           <label>Zona (código)</label>
-          <input type="text" id="legajo-cod-zona" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+          <input oninput="mostrarDescCodigoF931(this)" type="text" id="legajo-cod-zona" list="dl-zonas" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+          <div id="legajo-cod-zona-desc" style="font-size:11px;color:var(--text3);margin-top:3px;min-height:14px;"></div>
         </div>
         <div class="field" style="margin-bottom:0;">
           <label>Siniestrado (código)</label>
-          <input type="text" id="legajo-cod-siniestrado" placeholder="0 = no incapacitado" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+          <input oninput="mostrarDescCodigoF931(this)" type="text" id="legajo-cod-siniestrado" list="dl-siniestrados" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+          <div id="legajo-cod-siniestrado-desc" style="font-size:11px;color:var(--text3);margin-top:3px;min-height:14px;"></div>
         </div>
       </div>
     </details>
-    <datalist id="dl-modalidades">
-      <option value="1">A tiempo parcial: indeterminado / permanente</option>
-      <option value="8">A tiempo completo indeterminado / trabajo permanente</option>
-      <option value="14">Nuevo período de prueba</option>
-      <option value="21">A tiempo parcial determinado (contrato a plazo fijo)</option>
-      <option value="99">LRT (directores SA, municipios, etc.)</option>
-    </datalist>
+    <datalist id="dl-modalidades"></datalist>
+    <datalist id="dl-condiciones"></datalist>
+    <datalist id="dl-actividades"></datalist>
+    <datalist id="dl-zonas"></datalist>
+    <datalist id="dl-siniestrados"></datalist>
     <datalist id="datalist-obras-sociales"></datalist>
 
     <div class="modal-actions" style="margin-top:18px;">
@@ -4259,7 +4263,76 @@ async function abrirLegajoEmpleado(empleadoId,nombre){
     onCambioCategoriaSelect();
     normalizarObraSocialLegajo();
   }
+  refrescarDescCodigosF931();
   abrirModal('modal-legajo-empleado');
+}
+
+// ─── CÓDIGOS F.931 (SICOSS): descripción al lado del código ───
+// Catálogo de los códigos de uso habitual. Para sumar uno, agregarlo acá.
+const CODIGOS_F931={
+  modalidad:{
+    '1':'A tiempo parcial indeterminado / permanente',
+    '8':'A tiempo completo indeterminado / permanente',
+    '11':'Trabajo de temporada',
+    '12':'Trabajo eventual',
+    '14':'Nuevo período de prueba',
+    '21':'A tiempo parcial determinado (plazo fijo)',
+    '22':'A tiempo completo determinado (plazo fijo)',
+    '99':'LRT (directores SA, municipios, etc.)',
+  },
+  condicion:{
+    '0':'Jubilado Dto. 894/01 y/o Dto. 2288/02',
+    '1':'Servicios comunes, mayor de 18 años',
+    '2':'Jubilado',
+    '3':'Menor',
+    '5':'Servicios diferenciados, mayor de 18 años',
+  },
+  actividad:{
+    '49':'Actividades no clasificadas',
+  },
+  zona:{
+    '1':'Capital Federal',
+    '2':'Buenos Aires',
+    '3':'Buenos Aires',
+    '4':'Buenos Aires',
+    '5':'Buenos Aires',
+    '6':'Buenos Aires',
+  },
+  siniestrado:{
+    '0':'No incapacitado',
+    '1':'ILT – Incapacidad laboral temporaria',
+    '2':'ILPPP – Incapacidad permanente parcial provisoria',
+    '3':'ILPPD – Incapacidad permanente parcial definitiva',
+    '4':'ILPTP – Incapacidad permanente total provisoria',
+  },
+};
+const _DL_F931={modalidad:'dl-modalidades',condicion:'dl-condiciones',actividad:'dl-actividades',zona:'dl-zonas',siniestrado:'dl-siniestrados'};
+
+function _normCodF931(v){
+  const t=String(v??'').trim();
+  return /^\d+$/.test(t)?String(parseInt(t,10)):t;
+}
+
+function mostrarDescCodigoF931(input){
+  const campo=input.id.replace('legajo-cod-','');
+  const desc=document.getElementById(input.id+'-desc');
+  if(!desc)return;
+  const cod=_normCodF931(input.value);
+  if(!cod){desc.textContent='';return;}
+  const txt=CODIGOS_F931[campo]?.[cod];
+  desc.textContent=txt||'Código sin descripción en el catálogo';
+  desc.style.color=txt?'var(--text3)':'var(--danger)';
+}
+
+function refrescarDescCodigosF931(){
+  Object.entries(_DL_F931).forEach(([campo,dl])=>{
+    const el=document.getElementById(dl);
+    if(el&&!el.children.length){
+      el.innerHTML=Object.entries(CODIGOS_F931[campo]).map(([c,t])=>`<option value="${c}">${t}</option>`).join('');
+    }
+    const input=document.getElementById('legajo-cod-'+campo);
+    if(input)mostrarDescCodigoF931(input);
+  });
 }
 
 async function guardarLegajo(){
@@ -4581,8 +4654,8 @@ function resolverConceptosPlantilla(filas){
   });
 
   // Bruto remunerativo = solo conceptos FIJOS de tipo "rem" (nunca otros % ya resueltos)
-  const bruto=filas.filter(f=>f.calculo!=='pct'&&clasificacionConcepto(f.codigo)==='rem')
-    .reduce((s,f)=>s+f.valor,0);
+  const sumaFijos=t=>filas.filter(f=>f.calculo!=='pct'&&clasificacionConcepto(f.codigo)===t).reduce((s,f)=>s+f.valor,0);
+  const bruto=sumaFijos('rem')-sumaFijos('ded_rem');
 
   // Resolver primero los % con base_codigo explícito hacia otro concepto (puede
   // haber cadenas: 211 se basa en 416, y a su vez otro podría basarse en 211).
@@ -4615,6 +4688,21 @@ function resolverConceptosPlantilla(filas){
   return{resueltos,bruto,sinResolver};
 }
 
+// Totales de la plantilla con el mismo criterio que calcularTotalesConceptos():
+// remunerativo neto = rem − ded_rem (faltas, etc.); neto = rem neto + no rem − retenciones.
+function totalesPlantilla(filas,resueltos){
+  const t={rem:0,ded_rem:0,norem:0,ded:0};
+  filas.forEach(f=>{
+    const imp=resueltos[f.codigo];
+    if(imp==null)return;
+    const tipo=clasificacionConcepto(f.codigo);
+    if(t[tipo]!=null)t[tipo]+=imp;
+  });
+  const r2=v=>Math.round(v*100)/100;
+  const remNeto=r2(t.rem-t.ded_rem);
+  return{rem:r2(t.rem),dedRem:r2(t.ded_rem),remNeto,norem:r2(t.norem),ded:r2(t.ded),neto:r2(remNeto+t.norem-t.ded)};
+}
+
 function verVistaPreviaPlantilla(){
   const filas=leerFilasPlantillaUI();
   const cont=document.getElementById('plantilla-vista-previa');
@@ -4623,16 +4711,8 @@ function verVistaPreviaPlantilla(){
 
   const{resueltos,bruto,sinResolver}=resolverConceptosPlantilla(filas);
 
-  let brutoFinal=0,noRem=0,retenciones=0;
-  filas.forEach(f=>{
-    const tipo=clasificacionConcepto(f.codigo);
-    const importe=resueltos[f.codigo];
-    if(importe==null)return; // no se pudo resolver (base_codigo inexistente en la plantilla)
-    if(tipo==='rem')brutoFinal+=importe;
-    else if(tipo==='norem')noRem+=importe;
-    else if(tipo==='ded')retenciones+=importe;
-  });
-  const neto=brutoFinal+noRem-retenciones;
+  const tot=totalesPlantilla(filas,resueltos);
+  const brutoFinal=tot.remNeto,noRem=tot.norem,retenciones=tot.ded,neto=tot.neto;
 
   const filasOrdenadas=ordenarFilasPorTipo(filas);
   const detalleHtml=filasOrdenadas.map(f=>{
@@ -4694,6 +4774,111 @@ async function importarDesdeRecibo(){
   estado.textContent=`Importado desde el recibo real: ${conceptos.length} concepto(s), fieles al importe exacto de ese recibo. Revisá y guardá.`;
 }
 
+// Reemplaza todo el set de conceptos de la combinación empresa+empleado+periodo+tipo
+async function persistirPlantilla(periodo,tipo,filas){
+  await sb.from('conceptos_empleado').delete().eq('empresa_id',empresaActivaId).eq('empleado_id',_plantillaEmpleadoId).eq('periodo',periodo).eq('tipo',tipo);
+  const filasInsert=filas.map(f=>({
+    empresa_id:empresaActivaId,
+    empleado_id:_plantillaEmpleadoId,
+    periodo,tipo,
+    codigo:f.codigo,
+    calculo:f.calculo,
+    valor:f.valor,
+    base_codigo:f.base_codigo,
+  }));
+  const{error}=await sb.from('conceptos_empleado').insert(filasInsert);
+  if(error)throw error;
+}
+
+// ─── GENERAR RECIBO DESDE LA PLANTILLA ───
+// Arma el datos_json con el mismo formato que la importación de SOS (claves
+// numéricas = código de concepto), así verRecibo(), el PDF y el listado lo leen
+// sin cambios. Queda como borrador y sigue el circuito normal de aprobación.
+async function generarReciboDesdePlantilla(){
+  const periodo=document.getElementById('plantilla-periodo').value.trim();
+  const tipo=document.getElementById('plantilla-tipo').value.trim();
+  if(!periodo||!tipo){alert('Indicá período y tipo.');return;}
+  if(!_plantillaEmpleadoId||!empresaActivaId)return;
+  const filas=leerFilasPlantillaUI();
+  if(!filas.length){alert('La plantilla no tiene conceptos.');return;}
+
+  const{resueltos,sinResolver}=resolverConceptosPlantilla(filas);
+  if(sinResolver.length){alert(`No se puede generar: faltan calcular los códigos ${sinResolver.join(', ')}. Revisalos en la vista previa.`);return;}
+  const desconocidos=filas.filter(f=>clasificacionConcepto(f.codigo)==='desconocido').map(f=>f.codigo);
+  if(desconocidos.length){alert(`No se puede generar: los códigos ${desconocidos.join(', ')} no están clasificados (rem / no rem / deducción).`);return;}
+  const tot=totalesPlantilla(filas,resueltos);
+  if(tot.neto<=0&&!confirm(`El neto da ${mon(tot.neto)}. ¿Generar igual?`))return;
+
+  const hoy=new Date();
+  const fechaDefault=`${String(hoy.getDate()).padStart(2,'0')}/${String(hoy.getMonth()+1).padStart(2,'0')}/${hoy.getFullYear()}`;
+  const fechaPago=prompt('Fecha de pago (dd/mm/aaaa):',fechaDefault);
+  if(fechaPago===null)return;
+  if(fechaPago&&!/^\d{2}\/\d{2}\/\d{4}$/.test(fechaPago.trim())){alert('Fecha inválida. Usá dd/mm/aaaa.');return;}
+
+  const btn=document.getElementById('btn-generar-recibo-plantilla');
+  const textoOriginal=btn?btn.textContent:'';
+  if(btn){btn.disabled=true;btn.textContent='Generando...';}
+  try{
+    const{data:existente}=await sb.from('recibos').select('id,estado,neto,datos_json').eq('empresa_id',empresaActivaId).eq('empleado_id',_plantillaEmpleadoId).eq('periodo',periodo).eq('tipo',tipo).maybeSingle();
+    if(existente?.estado==='publicado'){alert('Ya hay un recibo publicado para ese período y tipo. No se modifica.');return;}
+    const puedeReemplazarRevocados=currentUser.tipo==='contador'||currentUser.es_admin===true||currentUser.es_admin==='true'||adminOriginal!==null;
+    if(existente?.estado==='revocado'&&!puedeReemplazarRevocados){alert('El recibo existente está revocado; solo el admin de la plataforma puede reemplazarlo.');return;}
+    if(existente){
+      const origen=existente.datos_json?.Origen==='plantilla'?'generado desde plantilla':'importado (SOS)';
+      if(!confirm(`Ya existe un recibo ${existente.estado} (${origen}) con neto ${mon(existente.neto)}.\n\nNuevo neto: ${mon(tot.neto)}\n\n¿Reemplazarlo?`))return;
+    }
+
+    const{data:emp}=await sb.from('empleados').select('nombre,cuil,fecha_ingreso').eq('id',_plantillaEmpleadoId).maybeSingle();
+    const{data:leg}=await sb.from('legajo_empleado').select('numero_legajo,categoria,cod_modalidad,fecha_baja').eq('empleado_id',_plantillaEmpleadoId).maybeSingle();
+    const isoADMY=v=>{if(!v)return '';const m=String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);return m?`${m[3]}/${m[2]}/${m[1]}`:String(v);};
+    const esLiqFinal=/liq/i.test(tipo)&&/final/i.test(tipo);
+
+    const datos={
+      'Período':periodo,'Tipo':tipo,'Fecha':fechaPago.trim(),
+      'Empleado':emp?.nombre||_plantillaEmpleadoNombre||'','CUIL':emp?.cuil||'',
+      'Legajo':leg?.numero_legajo||'','Categoria':leg?.categoria||'',
+      'Fecha Alta':isoADMY(emp?.fecha_ingreso),
+      'Modo Contrato':leg?.cod_modalidad||'',
+      'Haberes':tot.remNeto,'No Remun.':tot.norem,'Retenciones':tot.ded,
+      'Neto':tot.neto,'Redondeado':tot.neto,
+      'Origen':'plantilla',
+    };
+    if(esLiqFinal&&leg?.fecha_baja)datos['Fecha Baja']=isoADMY(leg.fecha_baja);
+    // Conceptos: un mismo código repetido en la plantilla se suma
+    filas.forEach(f=>{
+      const imp=resueltos[f.codigo];
+      if(!imp)return;
+      datos[f.codigo]=Math.round(((datos[f.codigo]||0)+imp)*100)/100;
+    });
+
+    const payload={
+      empresa_id:empresaActivaId,empleado_id:_plantillaEmpleadoId,
+      periodo,tipo,
+      fecha_pago:fechaPago.trim()?fechaPago.trim().split('/').reverse().join('-'):null,
+      total_haberes:tot.remNeto,total_no_rem:tot.norem,total_descuentos:tot.ded,
+      neto:tot.neto,neto_redondeado:tot.neto,
+      datos_json:datos,estado:'borrador',
+    };
+    const{data:rec,error}=await sb.from('recibos').upsert(payload,{onConflict:'empresa_id,empleado_id,periodo,tipo'}).select('id').single();
+    if(error)throw error;
+    if(existente?.estado==='revocado'){
+      await sb.from('recibo_historial').insert({recibo_id:rec.id,accion:'reemplazado_tras_revocacion',usuario_id:currentUser.id,motivo:'Recibo revocado reemplazado por uno generado desde plantilla.'});
+    }
+    // La plantilla queda guardada igual a lo que generó el recibo
+    await persistirPlantilla(periodo,tipo,filas);
+
+    showToast(`✅ Recibo generado como borrador — neto ${mon(tot.neto)}.`);
+    document.getElementById('plantilla-estado').textContent=`🧾 Recibo generado (borrador) para ${tipo} · ${periodo}. Neto ${mon(tot.neto)}.`;
+    if(document.getElementById('recibos-preparacion-container')?.style.display!=='none'&&document.getElementById('preparacion-periodo')?.value.trim())cargarRecibosPreparacion();
+    cargarRecibosContador().catch(()=>{});
+  }catch(err){
+    console.error('Error generando recibo desde plantilla:',err);
+    alert('No se pudo generar el recibo: '+err.message);
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent=textoOriginal;}
+  }
+}
+
 async function guardarPlantilla(){
   const periodo=document.getElementById('plantilla-periodo').value.trim();
   const tipo=document.getElementById('plantilla-tipo').value;
@@ -4706,19 +4891,7 @@ async function guardarPlantilla(){
   const textoOriginal=btn?btn.textContent:'';
   if(btn){btn.disabled=true;btn.textContent='Guardando...';}
   try{
-    // Reemplazamos todo el set de conceptos de esa combinación empresa+empleado+periodo+tipo
-    await sb.from('conceptos_empleado').delete().eq('empresa_id',empresaActivaId).eq('empleado_id',_plantillaEmpleadoId).eq('periodo',periodo).eq('tipo',tipo);
-    const filasInsert=filas.map(f=>({
-      empresa_id:empresaActivaId,
-      empleado_id:_plantillaEmpleadoId,
-      periodo,tipo,
-      codigo:f.codigo,
-      calculo:f.calculo,
-      valor:f.valor,
-      base_codigo:f.base_codigo,
-    }));
-    const{error}=await sb.from('conceptos_empleado').insert(filasInsert);
-    if(error)throw error;
+    await persistirPlantilla(periodo,tipo,filas);
     document.getElementById('plantilla-estado').textContent=`✅ Guardado: ${filas.length} concepto(s) para ${tipo} · ${periodo}.`;
     showToast(`✅ Plantilla guardada: ${filas.length} concepto(s) para ${tipo} · ${periodo}.`);
     cerrarModal('modal-plantilla-empleado');
