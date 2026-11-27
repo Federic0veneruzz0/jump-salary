@@ -461,7 +461,7 @@ tr:last-child td{border-bottom:none;}
             <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
               <div class="field" style="margin-bottom:0;">
                 <label>Período a preparar</label>
-                <input type="text" id="preparacion-periodo" placeholder="2026-08" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+                <input type="month" id="preparacion-periodo" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
               </div>
               <button class="btn-sm btn-gold" style="align-self:flex-end;" onclick="cargarRecibosPreparacion()">Cargar</button>
             </div>
@@ -740,12 +740,26 @@ tr:last-child td{border-bottom:none;}
       </div>
       <div class="field" style="flex:1;min-width:140px;margin-bottom:0;">
         <label>Período</label>
-        <input type="text" id="plantilla-periodo" placeholder="2026-07" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" onchange="cargarFilasPlantilla()">
+        <input type="month" id="plantilla-periodo" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" onchange="cargarFilasPlantilla()">
       </div>
       <div style="align-self:flex-end;display:flex;gap:8px;">
         <button class="btn-sm btn-outline" onclick="clonarPeriodoAnterior()">↩️ Clonar período anterior</button>
         <button class="btn-sm btn-outline" onclick="importarDesdeRecibo()">📥 Importar desde recibo ya cargado</button>
+        <button class="btn-sm btn-gold" onclick="togglePanelCalculo()">⚙️ Calcular desde convenio</button>
       </div>
+    </div>
+    <div id="plantilla-calc-panel" style="display:none;margin-bottom:12px;padding:12px;border:1.5px solid var(--border);border-radius:var(--radius);background:var(--surface-1,#f8f9fb);">
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;">
+        <div class="field" style="margin-bottom:0;">
+          <label>Faltas injustificadas (días)</label>
+          <input type="number" min="0" id="calc-faltas" value="0" style="width:110px;padding:7px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:normal;font-weight:400;font-size:13px;color:var(--text);cursor:pointer;margin-bottom:8px;">
+          <input type="checkbox" id="calc-pierde-presentismo" style="width:15px;height:15px;margin:0;"> Pierde presentismo
+        </label>
+        <button class="btn-sm btn-gold" id="btn-calcular-convenio" onclick="calcularDesdeConvenio()">Calcular</button>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-top:8px;">Ingreso y baja dentro del mes se toman del empleado y del legajo. Reemplaza en la grilla los conceptos que calcula (1, 7, 8, 4, 416, 415, 201, 202, 203, 206, 211) y deja los demás (embargos, adicionales, etc.).</div>
     </div>
     <div id="plantilla-estado" style="font-size:12px;color:var(--text3);margin-bottom:8px;"></div>
     <div style="overflow-x:auto;">
@@ -4446,6 +4460,8 @@ function mostrarVistaRecibos(vista){
   const preparacion=document.getElementById('recibos-preparacion-container');
   const btnEmitidos=document.getElementById('btn-vista-emitidos');
   const btnPreparacion=document.getElementById('btn-vista-preparacion');
+  const elPrepMes=document.getElementById('preparacion-periodo');
+  if(elPrepMes&&!elPrepMes.value)elPrepMes.value=_mesActualISO();
   if(vista==='preparacion'){
     emitidos.style.display='none';
     preparacion.style.display='block';
@@ -4461,7 +4477,9 @@ function mostrarVistaRecibos(vista){
 
 async function cargarRecibosPreparacion(){
   if(!empresaActivaId){alert('Seleccioná una empresa en el panel superior primero.');return;}
-  const periodo=document.getElementById('preparacion-periodo').value.trim();
+  const elPrep=document.getElementById('preparacion-periodo');
+  const periodo=normPeriodo(elPrep.value);
+  if(periodo&&elPrep.value.trim()!==periodo)elPrep.value=periodo;
   const cont=document.getElementById('tabla-preparacion');
   if(!periodo){alert('Indicá el período a preparar (ej. 2026-08).');return;}
   cont.innerHTML='<div class="loading">Cargando...</div>';
@@ -4469,7 +4487,7 @@ async function cargarRecibosPreparacion(){
   const{data:empleados}=await sb.from('empleados').select('id,nombre,cuil').eq('empresa_id',empresaActivaId).eq('activo',true).order('nombre');
   if(!empleados?.length){cont.innerHTML=`<div class="empty"><div class="empty-icon">👥</div><div class="empty-title">Sin empleados activos en esta empresa</div></div>`;return;}
 
-  const{data:filasPlantilla}=await sb.from('conceptos_empleado').select('empleado_id,tipo').eq('empresa_id',empresaActivaId).eq('periodo',periodo);
+  const{data:filasPlantilla}=await sb.from('conceptos_empleado').select('empleado_id,tipo').eq('empresa_id',empresaActivaId).in('periodo',periodoVariantes(periodo));
   const tiposPorEmpleado={};
   filasPlantilla?.forEach(f=>{
     if(!tiposPorEmpleado[f.empleado_id])tiposPorEmpleado[f.empleado_id]=new Set();
@@ -4491,6 +4509,51 @@ async function cargarRecibosPreparacion(){
   });
   html+='</tbody></table></div>';
   cont.innerHTML=html;
+}
+
+// ─── PERÍODOS: formato canónico AAAA-MM ───
+// Acepta "2026-11", "11-2026", "11/2026" o "2026/11" y devuelve "2026-11".
+function normPeriodo(v){
+  const t=String(v||'').trim();
+  let m=/^(\d{4})[-\/](\d{1,2})$/.exec(t);
+  if(m)return `${m[1]}-${m[2].padStart(2,'0')}`;
+  m=/^(\d{1,2})[-\/](\d{4})$/.exec(t);
+  if(m)return `${m[2]}-${m[1].padStart(2,'0')}`;
+  return t;
+}
+// Todas las formas en que ese período puede estar guardado (plantillas viejas o recibos de SOS)
+function periodoVariantes(v){
+  const iso=normPeriodo(v);
+  const m=/^(\d{4})-(\d{2})$/.exec(iso);
+  if(!m)return [iso];
+  const y=m[1],mo=m[2],mc=String(+mo);
+  return [...new Set([iso,`${mo}-${y}`,`${mo}/${y}`,`${y}/${mo}`,`${mc}-${y}`,`${mc}/${y}`])];
+}
+// Escribe el período con el mismo formato que usa un período de ejemplo
+function periodoComo(iso,ejemplo){
+  const m=/^(\d{4})-(\d{2})$/.exec(iso||'');
+  if(!m||!ejemplo)return iso;
+  const y=m[1],mo=m[2];
+  if(/^\d{2}-\d{4}$/.test(ejemplo))return `${mo}-${y}`;
+  if(/^\d{2}\/\d{4}$/.test(ejemplo))return `${mo}/${y}`;
+  if(/^\d{4}\/\d{2}$/.test(ejemplo))return `${y}/${mo}`;
+  return iso;
+}
+function _mesActualISO(){
+  const h=new Date();
+  return `${h.getFullYear()}-${String(h.getMonth()+1).padStart(2,'0')}`;
+}
+// El selector de "En preparación" arranca en el mes actual
+document.addEventListener('DOMContentLoaded',()=>{
+  const el=document.getElementById('preparacion-periodo');
+  if(el&&!el.value)el.value=_mesActualISO();
+});
+
+function _leerPeriodoPlantilla(){
+  const el=document.getElementById('plantilla-periodo');
+  const iso=normPeriodo(el.value);
+  if(iso&&el.value.trim()!==iso)el.value=iso;
+  return iso;
 }
 
 // ─── PLANTILLA DE LIQUIDACIÓN POR EMPLEADO ───
@@ -4621,7 +4684,7 @@ async function abrirPlantillaEmpleado(empleadoId,nombre,periodoDefault){
   _plantillaEmpleadoId=empleadoId;
   _plantillaEmpleadoNombre=nombre;
   document.getElementById('plantilla-empleado-title').textContent=`Plantilla de liquidación — ${nombre}`;
-  document.getElementById('plantilla-periodo').value=periodoDefault||'';
+  document.getElementById('plantilla-periodo').value=normPeriodo(periodoDefault)||_mesActualISO();
   document.getElementById('plantilla-tipo').value='sueldo';
   document.getElementById('plantilla-filas').innerHTML='';
   document.getElementById('plantilla-estado').textContent='Indicá período y tipo para cargar o crear la plantilla.';
@@ -4635,16 +4698,16 @@ async function abrirPlantillaEmpleado(empleadoId,nombre,periodoDefault){
   _plantillaSueldoBasico=legajo?.sueldo_basico??null;
   _plantillaBaseObraSocial=legajo?.base_obra_social??null;
 
-  if(periodoDefault)await cargarFilasPlantilla();
+  await cargarFilasPlantilla();
   abrirModal('modal-plantilla-empleado');
 }
 
 async function cargarFilasPlantilla(){
-  const periodo=document.getElementById('plantilla-periodo').value.trim();
+  const periodo=_leerPeriodoPlantilla();
   const tipo=document.getElementById('plantilla-tipo').value;
   const estado=document.getElementById('plantilla-estado');
   if(!periodo||!_plantillaEmpleadoId)return;
-  const{data:filas}=await sb.from('conceptos_empleado').select('*').eq('empresa_id',empresaActivaId).eq('empleado_id',_plantillaEmpleadoId).eq('periodo',periodo).eq('tipo',tipo).order('codigo');
+  const{data:filas}=await sb.from('conceptos_empleado').select('*').eq('empresa_id',empresaActivaId).eq('empleado_id',_plantillaEmpleadoId).in('periodo',periodoVariantes(periodo)).eq('tipo',tipo).order('codigo');
   document.getElementById('plantilla-filas').innerHTML='';
   if(filas?.length){
     ordenarFilasPorTipo(filas).forEach(f=>agregarFilaPlantilla(f));
@@ -4766,14 +4829,150 @@ function verVistaPreviaPlantilla(){
   cont.style.display='block';
 }
 
+function togglePanelCalculo(){
+  const p=document.getElementById('plantilla-calc-panel');
+  p.style.display=p.style.display==='none'?'block':'none';
+}
+
+// "2026-03-15" o "15/03/2026" -> Date (UTC, mediodía para evitar corrimientos)
+function _fechaFlexible(v){
+  const t=String(v||'').trim();
+  let m=/^(\d{4})-(\d{2})-(\d{2})/.exec(t);
+  if(m)return new Date(Date.UTC(+m[1],+m[2]-1,+m[3],12));
+  m=/^(\d{2})\/(\d{2})\/(\d{4})$/.exec(t);
+  if(m)return new Date(Date.UTC(+m[3],+m[2]-1,+m[1],12));
+  return null;
+}
+
+// ─── MOTOR: arma la plantilla de sueldo desde el convenio ───
+// Reglas: prorrateo de básico, presentismo, asignación no rem. y adicional de
+// integración social sobre 30 días; viático = valor diario × días de concurrencia
+// (25 − faltas en mes completo; días corridos sin domingos en mes parcial);
+// antigüedad = básico completo × tasa × años, entera, el año nuevo suma al mes
+// siguiente del aniversario.
+const CODIGOS_MOTOR={basico:'1',presentismo:'7',ais:'8',antiguedad:'4',asigNR:'416',viatico:'415',
+  jubilacion:'201',ley19032:'202',obraSocial:'203',solidario:'206',aporteNR:'211'};
+
+async function calcularDesdeConvenio(){
+  const periodo=_leerPeriodoPlantilla();
+  const estado=document.getElementById('plantilla-estado');
+  const mp=/^(\d{4})-(\d{2})$/.exec(periodo);
+  if(!mp){alert('Indicá el período como 2026-11.');return;}
+  if(!_plantillaEmpleadoId||!empresaActivaId)return;
+  const faltas=Math.max(0,parseInt(document.getElementById('calc-faltas').value,10)||0);
+  const pierdePres=document.getElementById('calc-pierde-presentismo').checked;
+  const btn=document.getElementById('btn-calcular-convenio');
+  btn.disabled=true;btn.textContent='Calculando...';
+  try{
+    const avisos=[];
+    const{data:emp}=await sb.from('empleados').select('fecha_ingreso').eq('id',_plantillaEmpleadoId).maybeSingle();
+    const{data:leg}=await sb.from('legajo_empleado').select('convenio,categoria,horas_mensuales,base_obra_social,afiliado_sindicato,fecha_baja,sueldo_basico').eq('empleado_id',_plantillaEmpleadoId).maybeSingle();
+    if(!leg?.convenio||!leg?.categoria){alert('El legajo no tiene convenio y categoría cargados.');return;}
+    const{data:conv}=await sb.from('convenios_colectivos').select('id').eq('nombre',leg.convenio).limit(1).maybeSingle();
+    if(!conv){alert(`No encontré el convenio "${leg.convenio}".`);return;}
+    const{data:cat}=await sb.from('categorias_convenio').select('id,nombre').eq('convenio_id',conv.id).eq('nombre',leg.categoria).limit(1).maybeSingle();
+    if(!cat){alert(`No encontré la categoría "${leg.categoria}" en el convenio.`);return;}
+    const primeroISO=`${periodo}-01`;
+    const{data:esc}=await sb.from('categoria_escalas').select('periodo,basico,presentismo,asig_nr').eq('categoria_id',cat.id).lte('periodo',primeroISO).order('periodo',{ascending:false}).limit(1).maybeSingle();
+    const{data:pars}=await sb.from('parametros_convenio').select('clave,periodo,valor').eq('convenio_id',conv.id).lte('periodo',primeroISO).order('periodo',{ascending:false});
+    const param={};(pars||[]).forEach(q=>{if(param[q.clave]==null)param[q.clave]=Number(q.valor);});
+    const{data:tasas}=await sb.from('antiguedad_convenio').select('desde_anios,hasta_anios,porcentaje_por_anio').eq('convenio_id',conv.id);
+
+    const media=leg.horas_mensuales!=null?leg.horas_mensuales<=120:/1\/2|media/i.test(cat.nombre);
+    let basicoCompleto=esc?.basico!=null?Number(esc.basico):null;
+    if(basicoCompleto==null){
+      basicoCompleto=leg.sueldo_basico!=null?Number(leg.sueldo_basico):null;
+      avisos.push('sin escala del mes para la categoría: se usó el básico del legajo');
+    } else if(esc.periodo.slice(0,7)!==periodo)avisos.push(`escala vigente desde ${_etiquetaMes(esc.periodo)}`);
+    if(basicoCompleto==null){alert('No hay básico: falta la escala del mes y el básico del legajo.');return;}
+
+    // Días del mes
+    const y=+mp[1],mo=+mp[2];
+    const primero=new Date(Date.UTC(y,mo-1,1,12)),ultimo=new Date(Date.UTC(y,mo,0,12));
+    const ingreso=_fechaFlexible(emp?.fecha_ingreso),baja=_fechaFlexible(leg.fecha_baja);
+    if(ingreso&&ingreso>ultimo){alert('El empleado ingresa después de este período.');return;}
+    if(baja&&baja<primero){alert('El empleado tiene fecha de baja anterior a este período.');return;}
+    const desde=ingreso&&ingreso>primero?ingreso:primero;
+    const hasta=baja&&baja<ultimo?baja:ultimo;
+    const parcial=desde>primero||hasta<ultimo;
+    const DIA=86400000;
+    const diasTrab=Math.round((hasta-desde)/DIA)+1;
+    const factor=parcial?Math.min(1,diasTrab/30):1;
+    let diasViatico;
+    if(parcial){
+      diasViatico=0;
+      for(let t=desde.getTime();t<=hasta.getTime();t+=DIA)if(new Date(t).getUTCDay()!==0)diasViatico++;
+      diasViatico=Math.max(0,diasViatico-faltas);
+    } else diasViatico=Math.max(0,25-faltas);
+
+    // Antigüedad: años completos; el aniversario suma desde el mes siguiente
+    let anios=0;
+    if(ingreso){
+      const mi=ingreso.getUTCMonth()+1;
+      anios=Math.max(0,(y-ingreso.getUTCFullYear())-(mo<=mi?1:0));
+    } else avisos.push('sin fecha de ingreso: no se calculó antigüedad');
+    const tramo=(tasas||[]).find(t=>anios>=Number(t.desde_anios)&&anios<=Number(t.hasta_anios));
+    const r2=v=>Math.round(v*100)/100;
+
+    const calc=[];
+    const fijo=(codigo,valor)=>{if(valor!=null&&valor>0)calc.push({codigo,calculo:'fijo',valor:r2(valor),base_codigo:null});};
+    fijo(CODIGOS_MOTOR.basico,basicoCompleto*factor);
+    if(!pierdePres){
+      if(esc?.presentismo!=null)fijo(CODIGOS_MOTOR.presentismo,Number(esc.presentismo)*factor);
+      else avisos.push('sin presentismo en la escala');
+    }
+    const ais=param[media?'ais_reducida':'ais_completa'];
+    if(ais!=null)fijo(CODIGOS_MOTOR.ais,ais*factor);else avisos.push('sin adicional de integración social');
+    if(anios>0){
+      if(tramo)fijo(CODIGOS_MOTOR.antiguedad,basicoCompleto*Number(tramo.porcentaje_por_anio)/100*anios);
+      else avisos.push(`sin tasa de antigüedad para ${anios} año(s)`);
+    }
+    const asigNR=esc?.asig_nr!=null?Number(esc.asig_nr)*factor:null;
+    if(asigNR)fijo(CODIGOS_MOTOR.asigNR,asigNR);
+    const viat=param[media?'viatico_reducida':'viatico_completa'];
+    if(viat!=null)fijo(CODIGOS_MOTOR.viatico,viat*diasViatico);else avisos.push('sin valor de viático');
+
+    const pct=(codigo,valor,base)=>calc.push({codigo,calculo:'pct',valor,base_codigo:base||null});
+    pct(CODIGOS_MOTOR.jubilacion,11);
+    pct(CODIGOS_MOTOR.ley19032,3);
+    pct(CODIGOS_MOTOR.obraSocial,3,leg.base_obra_social!=null?'legajo_os':null);
+    if(!leg.afiliado_sindicato)pct(CODIGOS_MOTOR.solidario,2);
+    else avisos.push('afiliado al sindicato: cargá la cuota sindical a mano');
+    if(asigNR)pct(CODIGOS_MOTOR.aporteNR,2,CODIGOS_MOTOR.asigNR);
+
+    // Mezcla: reemplaza los códigos del motor y conserva el resto de la grilla
+    const delMotor=new Set(Object.values(CODIGOS_MOTOR));
+    const otras=leerFilasPlantillaUI().filter(f=>f.codigo&&!delMotor.has(String(f.codigo)));
+    document.getElementById('plantilla-filas').innerHTML='';
+    ordenarFilasPorTipo([...calc,...otras]).forEach(f=>agregarFilaPlantilla(f));
+
+    const detalle=[
+      media?'media jornada':'jornada completa',
+      parcial?`${diasTrab} días trabajados (${diasTrab}/30)`:'mes completo',
+      `viático ${diasViatico} día(s)`,
+      `antigüedad ${anios} año(s)`,
+    ];
+    estado.innerHTML=`⚙️ Calculado: ${detalle.join(' · ')}.${otras.length?` Se conservaron ${otras.length} concepto(s) cargados a mano.`:''}`
+      +(avisos.length?`<br><span style="color:var(--danger);">⚠️ ${avisos.join(' · ')}.</span>`:'')
+      +' Revisá y guardá o generá el recibo.';
+    verVistaPreviaPlantilla();
+  }catch(err){
+    console.error('Error calculando desde convenio:',err);
+    alert('No se pudo calcular: '+err.message);
+  }finally{
+    btn.disabled=false;btn.textContent='Calcular';
+  }
+}
+
 async function clonarPeriodoAnterior(){
-  const periodoActual=document.getElementById('plantilla-periodo').value.trim();
+  const periodoActual=_leerPeriodoPlantilla();
   const tipo=document.getElementById('plantilla-tipo').value;
   const estado=document.getElementById('plantilla-estado');
   if(!periodoActual){alert('Indicá primero el período de destino (ej. 2026-07).');return;}
   if(!_plantillaEmpleadoId)return;
-  const{data:anteriores}=await sb.from('conceptos_empleado').select('periodo').eq('empresa_id',empresaActivaId).eq('empleado_id',_plantillaEmpleadoId).eq('tipo',tipo).lt('periodo',periodoActual).order('periodo',{ascending:false}).limit(1);
-  const periodoAnterior=anteriores?.[0]?.periodo;
+  const{data:anteriores}=await sb.from('conceptos_empleado').select('periodo').eq('empresa_id',empresaActivaId).eq('empleado_id',_plantillaEmpleadoId).eq('tipo',tipo);
+  const periodoAnterior=[...new Set((anteriores||[]).map(a=>a.periodo))]
+    .filter(p=>normPeriodo(p)<periodoActual).sort((a,b)=>normPeriodo(b).localeCompare(normPeriodo(a)))[0];
   if(!periodoAnterior){alert(`No encontré una plantilla anterior de tipo "${tipo}" para clonar.`);return;}
   const{data:filas}=await sb.from('conceptos_empleado').select('*').eq('empresa_id',empresaActivaId).eq('empleado_id',_plantillaEmpleadoId).eq('periodo',periodoAnterior).eq('tipo',tipo).order('codigo');
   document.getElementById('plantilla-filas').innerHTML='';
@@ -4782,12 +4981,12 @@ async function clonarPeriodoAnterior(){
 }
 
 async function importarDesdeRecibo(){
-  const periodo=document.getElementById('plantilla-periodo').value.trim();
+  const periodo=_leerPeriodoPlantilla();
   const tipo=document.getElementById('plantilla-tipo').value.trim();
   const estado=document.getElementById('plantilla-estado');
   if(!periodo){alert('Indicá el período del recibo a importar (ej. 2026-07).');return;}
   if(!_plantillaEmpleadoId)return;
-  const{data:recibo}=await sb.from('recibos').select('*').eq('empresa_id',empresaActivaId).eq('empleado_id',_plantillaEmpleadoId).eq('periodo',periodo).eq('tipo',tipo).maybeSingle();
+  const{data:recibo}=await sb.from('recibos').select('*').eq('empresa_id',empresaActivaId).eq('empleado_id',_plantillaEmpleadoId).in('periodo',periodoVariantes(periodo)).eq('tipo',tipo).limit(1).maybeSingle();
   if(!recibo){
     alert(`No encontré un recibo cargado para ese empleado, período "${periodo}" y tipo "${tipo}". Revisá que el tipo esté escrito exactamente igual que en el recibo (por ejemplo "Liq. Final" con mayúsculas y punto).`);
     return;
@@ -4801,7 +5000,8 @@ async function importarDesdeRecibo(){
 
 // Reemplaza todo el set de conceptos de la combinación empresa+empleado+periodo+tipo
 async function persistirPlantilla(periodo,tipo,filas){
-  await sb.from('conceptos_empleado').delete().eq('empresa_id',empresaActivaId).eq('empleado_id',_plantillaEmpleadoId).eq('periodo',periodo).eq('tipo',tipo);
+  periodo=normPeriodo(periodo);
+  await sb.from('conceptos_empleado').delete().eq('empresa_id',empresaActivaId).eq('empleado_id',_plantillaEmpleadoId).in('periodo',periodoVariantes(periodo)).eq('tipo',tipo);
   const filasInsert=filas.map(f=>({
     empresa_id:empresaActivaId,
     empleado_id:_plantillaEmpleadoId,
@@ -4820,7 +5020,7 @@ async function persistirPlantilla(periodo,tipo,filas){
 // numéricas = código de concepto), así verRecibo(), el PDF y el listado lo leen
 // sin cambios. Queda como borrador y sigue el circuito normal de aprobación.
 async function generarReciboDesdePlantilla(){
-  const periodo=document.getElementById('plantilla-periodo').value.trim();
+  const periodo=_leerPeriodoPlantilla();
   const tipo=document.getElementById('plantilla-tipo').value.trim();
   if(!periodo||!tipo){alert('Indicá período y tipo.');return;}
   if(!_plantillaEmpleadoId||!empresaActivaId)return;
@@ -4844,7 +5044,13 @@ async function generarReciboDesdePlantilla(){
   const textoOriginal=btn?btn.textContent:'';
   if(btn){btn.disabled=true;btn.textContent='Generando...';}
   try{
-    const{data:existente}=await sb.from('recibos').select('id,estado,neto,datos_json').eq('empresa_id',empresaActivaId).eq('empleado_id',_plantillaEmpleadoId).eq('periodo',periodo).eq('tipo',tipo).maybeSingle();
+    const{data:existente}=await sb.from('recibos').select('id,periodo,estado,neto,datos_json').eq('empresa_id',empresaActivaId).eq('empleado_id',_plantillaEmpleadoId).in('periodo',periodoVariantes(periodo)).eq('tipo',tipo).limit(1).maybeSingle();
+    // El recibo usa el mismo formato de período que los demás recibos de la empresa (los de SOS)
+    let periodoRecibo=existente?.periodo;
+    if(!periodoRecibo){
+      const{data:ej}=await sb.from('recibos').select('periodo').eq('empresa_id',empresaActivaId).limit(1).maybeSingle();
+      periodoRecibo=periodoComo(periodo,ej?.periodo);
+    }
     if(existente?.estado==='publicado'){alert('Ya hay un recibo publicado para ese período y tipo. No se modifica.');return;}
     const puedeReemplazarRevocados=currentUser.tipo==='contador'||currentUser.es_admin===true||currentUser.es_admin==='true'||adminOriginal!==null;
     if(existente?.estado==='revocado'&&!puedeReemplazarRevocados){alert('El recibo existente está revocado; solo el admin de la plataforma puede reemplazarlo.');return;}
@@ -4859,7 +5065,7 @@ async function generarReciboDesdePlantilla(){
     const esLiqFinal=/liq/i.test(tipo)&&/final/i.test(tipo);
 
     const datos={
-      'Período':periodo,'Tipo':tipo,'Fecha':fechaPago.trim(),
+      'Período':periodoRecibo,'Tipo':tipo,'Fecha':fechaPago.trim(),
       'Empleado':emp?.nombre||_plantillaEmpleadoNombre||'','CUIL':emp?.cuil||'',
       'Legajo':leg?.numero_legajo||'','Categoria':leg?.categoria||'',
       'Fecha Alta':isoADMY(emp?.fecha_ingreso),
@@ -4878,7 +5084,7 @@ async function generarReciboDesdePlantilla(){
 
     const payload={
       empresa_id:empresaActivaId,empleado_id:_plantillaEmpleadoId,
-      periodo,tipo,
+      periodo:periodoRecibo,tipo,
       fecha_pago:fechaPago.trim()?fechaPago.trim().split('/').reverse().join('-'):null,
       total_haberes:tot.remNeto,total_no_rem:tot.norem,total_descuentos:tot.ded,
       neto:tot.neto,neto_redondeado:tot.neto,
@@ -4905,7 +5111,7 @@ async function generarReciboDesdePlantilla(){
 }
 
 async function guardarPlantilla(){
-  const periodo=document.getElementById('plantilla-periodo').value.trim();
+  const periodo=_leerPeriodoPlantilla();
   const tipo=document.getElementById('plantilla-tipo').value;
   if(!periodo){alert('Indicá el período (ej. 2026-07).');return;}
   if(!_plantillaEmpleadoId||!empresaActivaId)return;
