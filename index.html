@@ -803,7 +803,7 @@ tr:last-child td{border-bottom:none;}
 
     <div class="modal-actions" style="margin-top:16px;">
       <button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-plantilla-empleado')">Cancelar</button>
-      <button class="btn-sm btn-outline" style="flex:1;" onclick="verVistaPreviaPlantilla()">👁️ Vista previa</button>
+      <button class="btn-sm btn-outline" style="flex:1;" onclick="verReciboPreviaPlantilla()">👁️ Vista previa</button>
       <button class="btn-sm btn-gold" id="btn-guardar-plantilla" style="flex:1;" onclick="guardarPlantilla()">💾 Guardar plantilla</button>
       <button class="btn-sm btn-gold" id="btn-generar-recibo-plantilla" style="flex:1;" onclick="generarReciboDesdePlantilla()">🧾 Generar recibo</button>
     </div>
@@ -2574,8 +2574,12 @@ function calcularAporteOS(conceptos){
 // sola vez. Fuente única de verdad reutilizada por verRecibo() (vista HTML) y por
 // el generador nativo de PDF (dibujarReciboPDF), para que ambos muestren siempre
 // exactamente los mismos números.
-async function calcularDatosRecibo(reciboId){
-  const{data:r}=await sb.from('recibos').select('*,empleados(*),empresas(*)').eq('id',reciboId).single();
+async function calcularDatosRecibo(reciboId,reciboEnMemoria){
+  let r=reciboEnMemoria||null;
+  if(!r){
+    const{data}=await sb.from('recibos').select('*,empleados(*),empresas(*)').eq('id',reciboId).single();
+    r=data;
+  }
   if(!r)return null;
   const{data:conceptosPropios}=await sb.from('conceptos_empresa').select('codigo,nombre,tipo,calculo,porcentaje,base_codigo').eq('empresa_id',r.empresa_id);
   const mapPropio={};
@@ -2618,13 +2622,14 @@ async function calcularDatosRecibo(reciboId){
   const emp=r.empleados||{};
   const empresa=r.empresas||{};
 
-  const{data:constancia}=await sb.from('constancias').select('fecha_firma').eq('recibo_id',reciboId).order('fecha_firma',{ascending:false}).limit(1).maybeSingle();
+  const{data:constancia}=reciboEnMemoria?{data:null}
+    :await sb.from('constancias').select('fecha_firma').eq('recibo_id',reciboId).order('fecha_firma',{ascending:false}).limit(1).maybeSingle();
 
   return{r,conceptos,remBase,totales,contrib,totalContrib,costoTotal,emp,empresa,fechaFirma:constancia?.fecha_firma||null};
 }
 
-async function verRecibo(reciboId){
-  const datosRecibo=await calcularDatosRecibo(reciboId);
+async function verRecibo(reciboId,reciboEnMemoria){
+  const datosRecibo=await calcularDatosRecibo(reciboId,reciboEnMemoria);
   if(!datosRecibo)return;
   const{r,conceptos,remBase,totales,contrib,totalContrib,costoTotal,emp,empresa,fechaFirma}=datosRecibo;
 
@@ -2784,7 +2789,12 @@ async function verRecibo(reciboId){
   },150);
 
   const actions=document.getElementById('modal-recibo-actions');
-  if(r.estado==='borrador'){
+  const modalVer=document.getElementById('modal-ver-recibo');
+  modalVer.style.zIndex=reciboEnMemoria?'110':'';
+  if(reciboEnMemoria){
+    document.getElementById('modal-recibo-title').textContent='Vista previa del recibo (sin guardar)';
+    actions.innerHTML=`<button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-ver-recibo')">Cerrar</button>`;
+  } else if(r.estado==='borrador'){
     actions.innerHTML=`<button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-ver-recibo')">Cancelar</button><button class="btn-sm btn-danger" style="flex:1;padding:10px;" onclick="iniciarRechazo('${r.id}')">❌ Rechazar</button><button class="btn-sm btn-success" style="flex:1;padding:10px;" onclick="aprobarRecibo('${r.id}')">✅ Aprobar</button>`;
   } else if(r.estado==='rechazado'){
     actions.innerHTML=`<button class="btn-sm btn-outline" style="flex:1;" onclick="cerrarModal('modal-ver-recibo')">Cerrar</button>`;
@@ -4827,42 +4837,37 @@ function resolverConceptosPlantilla(filas){
     else resueltos[f.codigo]=f.valor;
   });
 
-  // Bruto remunerativo = solo conceptos FIJOS de tipo "rem" (nunca otros % ya resueltos)
-  const sumaFijos=t=>filas.filter(f=>f.calculo!=='pct'&&clasificacionConcepto(f.codigo)===t).reduce((s,f)=>s+f.valor,0);
-  const bruto=sumaFijos('rem')-sumaFijos('ded_rem');
+  const r2=v=>Math.round(v*100)/100;
+  // Resuelve los % con base explícita: otro concepto (puede haber cadenas: 211
+  // sobre 416), "legajo_os" (base de Obra Social de jornada completa del legajo)
+  // o "basico_completo" (básico del mes sin prorratear).
+  const resolverExplicitos=()=>{
+    let cambio=true,vueltas=0;
+    while(cambio&&vueltas<10){
+      cambio=false;vueltas++;
+      pctFilas.forEach(f=>{
+        if(resueltos[f.codigo]!=null||!f.base_codigo)return;
+        let base=null;
+        if(f.base_codigo==='legajo_os')base=_plantillaBaseObraSocial;
+        else if(f.base_codigo==='basico_completo')base=_plantillaBasicoCompleto??_plantillaSueldoBasico;
+        else base=resueltos[f.base_codigo];
+        if(base!=null){resueltos[f.codigo]=r2(base*f.valor/100);cambio=true;}
+      });
+    }
+  };
+  resolverExplicitos();
 
-  // Resolver primero los % con base_codigo explícito hacia otro concepto (puede
-  // haber cadenas: 211 se basa en 416, y a su vez otro podría basarse en 211).
-  // "legajo_os" es una base especial: no es un concepto de la plantilla sino el
-  // valor cargado en el legajo para Obra Social cuando el empleado aporta por
-  // jornada completa aunque trabaje media jornada.
-  let cambio=true,vueltas=0;
-  while(cambio&&vueltas<10){
-    cambio=false;vueltas++;
-    pctFilas.forEach(f=>{
-      if(resueltos[f.codigo]!=null)return;
-      if(f.base_codigo==='legajo_os'){
-        if(_plantillaBaseObraSocial!=null){
-          resueltos[f.codigo]=Math.round(_plantillaBaseObraSocial*f.valor/100*100)/100;
-          cambio=true;
-        }
-      } else if(f.base_codigo==='basico_completo'){
-        const bc=_plantillaBasicoCompleto??_plantillaSueldoBasico;
-        if(bc!=null){
-          resueltos[f.codigo]=Math.round(bc*f.valor/100*100)/100;
-          cambio=true;
-        }
-      } else if(f.base_codigo){
-        if(resueltos[f.base_codigo]!=null){
-          resueltos[f.codigo]=Math.round(resueltos[f.base_codigo]*f.valor/100*100)/100;
-          cambio=true;
-        }
-      } else {
-        resueltos[f.codigo]=Math.round(bruto*f.valor/100*100)/100;
-        cambio=true;
-      }
-    });
-  }
+  // Bruto remunerativo: todos los conceptos rem ya resueltos (fijos y % con base
+  // explícita, como la antigüedad sobre el básico) menos los ded_rem.
+  const sumaTipo=t=>filas.filter(f=>clasificacionConcepto(f.codigo)===t&&resueltos[f.codigo]!=null)
+    .reduce((s,f)=>s+resueltos[f.codigo],0);
+  const bruto=r2(sumaTipo('rem')-sumaTipo('ded_rem'));
+
+  // Los % sin base van sobre ese bruto (aportes); después, los que dependan de ellos.
+  pctFilas.forEach(f=>{
+    if(resueltos[f.codigo]==null&&!f.base_codigo)resueltos[f.codigo]=r2(bruto*f.valor/100);
+  });
+  resolverExplicitos();
 
   const sinResolver=pctFilas.filter(f=>resueltos[f.codigo]==null).map(f=>f.codigo);
   return{resueltos,bruto,sinResolver};
@@ -4920,6 +4925,17 @@ function verVistaPreviaPlantilla(){
   }
   body.innerHTML=html;
   cont.style.display='block';
+}
+
+// Botón "Vista previa": además de armarla, la lleva a la vista y la resalta
+function mostrarVistaPreviaPlantilla(){
+  verVistaPreviaPlantilla();
+  const cont=document.getElementById('plantilla-vista-previa');
+  if(cont.style.display==='none'){alert('La plantilla no tiene conceptos.');return;}
+  cont.scrollIntoView({behavior:'smooth',block:'center'});
+  cont.style.transition='box-shadow .3s';
+  cont.style.boxShadow='0 0 0 3px var(--gold,#E8B84A)';
+  setTimeout(()=>{cont.style.boxShadow='';},1500);
 }
 
 function togglePanelCalculo(){
@@ -5131,6 +5147,59 @@ async function persistirPlantilla(periodo,tipo,filas){
   if(error)throw error;
 }
 
+// datos_json con el formato de SOS (claves numéricas = código de concepto)
+function _datosJsonPlantilla({periodoRecibo,tipo,fechaPago,emp,leg,tot,filas,resueltos}){
+  const isoADMY=v=>{if(!v)return '';const m=String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);return m?`${m[3]}/${m[2]}/${m[1]}`:String(v);};
+  const esLiqFinal=/liq/i.test(tipo)&&/final/i.test(tipo);
+  const datos={
+    'Período':periodoRecibo,'Tipo':tipo,'Fecha':fechaPago||'',
+    'Empleado':emp?.nombre||_plantillaEmpleadoNombre||'','CUIL':emp?.cuil||'',
+    'Legajo':leg?.numero_legajo||'','Categoria':leg?.categoria||'',
+    'Fecha Alta':isoADMY(emp?.fecha_ingreso),
+    'Modo Contrato':leg?.cod_modalidad||'',
+    'Haberes':tot.remNeto,'No Remun.':tot.norem,'Retenciones':tot.ded,
+    'Neto':tot.neto,'Redondeado':tot.neto,
+    'Origen':'plantilla',
+  };
+  if(esLiqFinal&&leg?.fecha_baja)datos['Fecha Baja']=isoADMY(leg.fecha_baja);
+  // Conceptos: un mismo código repetido en la plantilla se suma
+  filas.forEach(f=>{
+    const imp=resueltos[f.codigo];
+    if(!imp)return;
+    datos[f.codigo]=Math.round(((datos[f.codigo]||0)+imp)*100)/100;
+  });
+  return datos;
+}
+
+// Vista previa del recibo tal como quedaría, sin guardar nada
+async function verReciboPreviaPlantilla(){
+  const periodo=_leerPeriodoPlantilla();
+  const tipo=document.getElementById('plantilla-tipo').value.trim();
+  const filas=leerFilasPlantillaUI();
+  if(!filas.length){alert('La plantilla no tiene conceptos.');return;}
+  const{resueltos,sinResolver}=resolverConceptosPlantilla(filas);
+  if(sinResolver.length){alert(`Faltan calcular los códigos ${sinResolver.join(', ')}.`);return;}
+  const tot=totalesPlantilla(filas,resueltos);
+  try{
+    const{data:emp}=await sb.from('empleados').select('*').eq('id',_plantillaEmpleadoId).maybeSingle();
+    const{data:leg}=await sb.from('legajo_empleado').select('numero_legajo,categoria,cod_modalidad,fecha_baja').eq('empleado_id',_plantillaEmpleadoId).maybeSingle();
+    const{data:empresa}=await sb.from('empresas').select('*').eq('id',empresaActivaId).maybeSingle();
+    const{data:ej}=await sb.from('recibos').select('periodo').eq('empresa_id',empresaActivaId).limit(1).maybeSingle();
+    const periodoRecibo=periodoComo(periodo,ej?.periodo);
+    const datos=_datosJsonPlantilla({periodoRecibo,tipo,fechaPago:'',emp,leg,tot,filas,resueltos});
+    await verRecibo(null,{
+      id:null,empresa_id:empresaActivaId,empleado_id:_plantillaEmpleadoId,
+      periodo:periodoRecibo,tipo,fecha_pago:null,estado:'vista_previa',
+      total_haberes:tot.remNeto,total_no_rem:tot.norem,total_descuentos:tot.ded,
+      neto:tot.neto,neto_redondeado:tot.neto,datos_json:datos,
+      empleados:emp||{},empresas:empresa||{},
+    });
+  }catch(err){
+    console.error('Error en la vista previa del recibo:',err);
+    alert('No se pudo armar la vista previa: '+err.message);
+  }
+}
+
 // ─── GENERAR RECIBO DESDE LA PLANTILLA ───
 // Arma el datos_json con el mismo formato que la importación de SOS (claves
 // numéricas = código de concepto), así verRecibo(), el PDF y el listado lo leen
@@ -5180,25 +5249,7 @@ async function generarReciboDesdePlantilla(){
     const{data:emp}=await sb.from('empleados').select('nombre,cuil,fecha_ingreso').eq('id',_plantillaEmpleadoId).maybeSingle();
     const{data:leg}=await sb.from('legajo_empleado').select('numero_legajo,categoria,cod_modalidad,fecha_baja').eq('empleado_id',_plantillaEmpleadoId).maybeSingle();
     const isoADMY=v=>{if(!v)return '';const m=String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);return m?`${m[3]}/${m[2]}/${m[1]}`:String(v);};
-    const esLiqFinal=/liq/i.test(tipo)&&/final/i.test(tipo);
-
-    const datos={
-      'Período':periodoRecibo,'Tipo':tipo,'Fecha':fechaPago.trim(),
-      'Empleado':emp?.nombre||_plantillaEmpleadoNombre||'','CUIL':emp?.cuil||'',
-      'Legajo':leg?.numero_legajo||'','Categoria':leg?.categoria||'',
-      'Fecha Alta':isoADMY(emp?.fecha_ingreso),
-      'Modo Contrato':leg?.cod_modalidad||'',
-      'Haberes':tot.remNeto,'No Remun.':tot.norem,'Retenciones':tot.ded,
-      'Neto':tot.neto,'Redondeado':tot.neto,
-      'Origen':'plantilla',
-    };
-    if(esLiqFinal&&leg?.fecha_baja)datos['Fecha Baja']=isoADMY(leg.fecha_baja);
-    // Conceptos: un mismo código repetido en la plantilla se suma
-    filas.forEach(f=>{
-      const imp=resueltos[f.codigo];
-      if(!imp)return;
-      datos[f.codigo]=Math.round(((datos[f.codigo]||0)+imp)*100)/100;
-    });
+    const datos=_datosJsonPlantilla({periodoRecibo,tipo,fechaPago:fechaPago.trim(),emp,leg,tot,filas,resueltos});
 
     const payload={
       empresa_id:empresaActivaId,empleado_id:_plantillaEmpleadoId,
