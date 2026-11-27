@@ -4905,8 +4905,8 @@ function _fechaFlexible(v){
 // Reglas: prorrateo de básico, presentismo, asignación no rem. y adicional de
 // integración social sobre 30 días; viático = valor diario × días de concurrencia
 // (25 − faltas en mes completo; días corridos sin domingos en mes parcial);
-// antigüedad = básico completo × tasa × años, entera, el año nuevo suma al mes
-// siguiente del aniversario.
+// antigüedad = básico completo × tasa × años, entera, el año nuevo suma en el
+// mes del aniversario.
 // Descuento de presentismo por ausencias (Maestranza), sobre el total de días:
 // 1 día → 50 % si es injustificada, 30 % si es justificada.
 // 2 días → 100 % si las dos son injustificadas; 70 % en cualquier otro caso
@@ -4977,11 +4977,11 @@ async function calcularDesdeConvenio(){
       diasViatico=Math.max(0,diasViatico-faltas);
     } else diasViatico=Math.max(0,25-faltas);
 
-    // Antigüedad: años completos; el aniversario suma desde el mes siguiente
+    // Antigüedad: años completos; el año nuevo suma desde el mes del aniversario
     let anios=0;
     if(ingreso){
       const mi=ingreso.getUTCMonth()+1;
-      anios=Math.max(0,(y-ingreso.getUTCFullYear())-(mo<=mi?1:0));
+      anios=Math.max(0,(y-ingreso.getUTCFullYear())-(mo<mi?1:0));
     } else avisos.push('sin fecha de ingreso: no se calculó antigüedad');
     const tramo=(tasas||[]).find(t=>anios>=Number(t.desde_anios)&&anios<=Number(t.hasta_anios));
     const r2=v=>Math.round(v*100)/100;
