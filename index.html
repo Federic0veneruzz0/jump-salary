@@ -762,8 +762,12 @@ tr:last-child td{border-bottom:none;}
           <label>Faltas injustificadas (días)</label>
           <input type="number" min="0" id="calc-faltas" value="0" style="width:110px;padding:7px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
         </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Faltas justificadas (días)</label>
+          <input type="number" min="0" id="calc-faltas-just" value="0" style="width:110px;padding:7px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+        </div>
         <label style="display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:normal;font-weight:400;font-size:13px;color:var(--text);cursor:pointer;margin-bottom:8px;">
-          <input type="checkbox" id="calc-pierde-presentismo" style="width:15px;height:15px;margin:0;"> Pierde presentismo
+          <input type="checkbox" id="calc-pierde-presentismo" style="width:15px;height:15px;margin:0;"> Pierde todo el presentismo (manual)
         </label>
         <button class="btn-sm btn-gold" id="btn-calcular-convenio" onclick="calcularDesdeConvenio()">Calcular</button>
       </div>
@@ -4903,6 +4907,19 @@ function _fechaFlexible(v){
 // (25 − faltas en mes completo; días corridos sin domingos en mes parcial);
 // antigüedad = básico completo × tasa × años, entera, el año nuevo suma al mes
 // siguiente del aniversario.
+// Descuento de presentismo por ausencias (Maestranza), sobre el total de días:
+// 1 día → 50 % si es injustificada, 30 % si es justificada.
+// 2 días → 100 % si las dos son injustificadas; 70 % en cualquier otro caso
+//          (dos justificadas, o una de cada).
+// 3 o más días → 100 %.
+function descuentoPresentismo(injust,just){
+  const total=injust+just;
+  if(total<=0)return 0;
+  if(total===1)return injust===1?50:30;
+  if(total===2)return injust===2?100:70;
+  return 100;
+}
+
 const CODIGOS_MOTOR={basico:'1',presentismo:'7',ais:'8',antiguedad:'4',asigNR:'416',viatico:'415',
   jubilacion:'201',ley19032:'202',obraSocial:'203',solidario:'206',aporteNR:'211'};
 
@@ -4912,7 +4929,9 @@ async function calcularDesdeConvenio(){
   const mp=/^(\d{4})-(\d{2})$/.exec(periodo);
   if(!mp){alert('Indicá el período como 2026-11.');return;}
   if(!_plantillaEmpleadoId||!empresaActivaId)return;
-  const faltas=Math.max(0,parseInt(document.getElementById('calc-faltas').value,10)||0);
+  const faltasInj=Math.max(0,parseInt(document.getElementById('calc-faltas').value,10)||0);
+  const faltasJus=Math.max(0,parseInt(document.getElementById('calc-faltas-just').value,10)||0);
+  const faltas=faltasInj+faltasJus; // días sin concurrencia, para el viático
   const pierdePres=document.getElementById('calc-pierde-presentismo').checked;
   const btn=document.getElementById('btn-calcular-convenio');
   btn.disabled=true;btn.textContent='Calculando...';
@@ -4970,8 +4989,9 @@ async function calcularDesdeConvenio(){
     const calc=[];
     const fijo=(codigo,valor)=>{if(valor!=null&&valor>0)calc.push({codigo,calculo:'fijo',valor:r2(valor),base_codigo:null});};
     fijo(CODIGOS_MOTOR.basico,basicoCompleto*factor);
-    if(!pierdePres){
-      if(esc?.presentismo!=null)fijo(CODIGOS_MOTOR.presentismo,Number(esc.presentismo)*factor);
+    const descPres=pierdePres?100:descuentoPresentismo(faltasInj,faltasJus);
+    if(descPres<100){
+      if(esc?.presentismo!=null)fijo(CODIGOS_MOTOR.presentismo,Number(esc.presentismo)*factor*(100-descPres)/100);
       else avisos.push('sin presentismo en la escala');
     }
     const ais=param[media?'ais_reducida':'ais_completa'];
@@ -5003,6 +5023,7 @@ async function calcularDesdeConvenio(){
       media?'media jornada':'jornada completa',
       parcial?`${diasTrab} días trabajados (${diasTrab}/30)`:'mes completo',
       `viático ${diasViatico} día(s)`,
+      descPres?`presentismo −${descPres} %`:'presentismo completo',
       `antigüedad ${anios} año(s)`,
     ];
     estado.innerHTML=`⚙️ Calculado: ${detalle.join(' · ')}.${otras.length?` Se conservaron ${otras.length} concepto(s) cargados a mano.`:''}`
