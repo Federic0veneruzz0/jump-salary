@@ -771,7 +771,7 @@ tr:last-child td{border-bottom:none;}
         </label>
         <button class="btn-sm btn-gold" id="btn-calcular-convenio" onclick="calcularDesdeConvenio()">Calcular</button>
       </div>
-      <div style="font-size:11px;color:var(--text3);margin-top:8px;">Ingreso y baja dentro del mes se toman del empleado y del legajo. Reemplaza en la grilla los conceptos que calcula (1, 7, 8, 4, 416, 415, 201, 202, 203, 206, 211) y deja los demás (embargos, adicionales, etc.).</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:8px;">Ingreso y baja dentro del mes se toman del empleado y del legajo. Reemplaza en la grilla los conceptos que calcula (1, 3, 7, 8, 416, 415, 201, 202, 203, 206, 211) y deja los demás (embargos, adicionales, etc.).</div>
     </div>
     <div id="plantilla-estado" style="font-size:12px;color:var(--text3);margin-bottom:8px;"></div>
     <div style="overflow-x:auto;">
@@ -793,6 +793,7 @@ tr:last-child td{border-bottom:none;}
     <datalist id="datalist-conceptos-nombres"></datalist>
     <datalist id="datalist-bases-especiales">
       <option value="legajo_os">Base Obra Social jornada completa (del legajo)</option>
+      <option value="basico_completo">Básico del mes sin prorratear</option>
     </datalist>
 
     <div id="plantilla-vista-previa" style="display:none;margin-top:16px;padding:14px;background:var(--surface-1,#f8f9fb);border-radius:var(--radius);">
@@ -4595,7 +4596,8 @@ let _plantillaEmpleadoId=null;
 let _plantillaEmpleadoNombre='';
 let _plantillaMapPropio={};
 let _plantillaSueldoBasico=null; // sueldo básico del legajo del empleado, para autocompletar
-let _plantillaBaseObraSocial=null; // base especial para Obra Social cuando aporta por jornada completa
+let _plantillaBaseObraSocial=null;
+let _plantillaBasicoCompleto=null; // básico del mes sin prorratear (base de la antigüedad en meses parciales) // base especial para Obra Social cuando aporta por jornada completa
 
 function normalizarTexto(s){
   return(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
@@ -4626,7 +4628,7 @@ function filaPlantillaHTML(f){
     </select></td>
     <td style="padding:4px 6px;"><div style="display:flex;gap:4px;align-items:center;">
       <input type="number" step="0.01" class="pl-valor" value="${f.valor??''}" style="width:100px;padding:6px;border:1.5px solid var(--border);border-radius:6px;">
-      <button type="button" class="btn-sm btn-outline" title="Usar el sueldo básico cargado en el legajo" style="padding:4px 6px;" onclick="usarBasicoDeLegajo(this)">📋</button>
+      <button type="button" class="btn-sm btn-outline" title="Restaurar el valor correcto de este concepto" style="padding:4px 6px;" onclick="restaurarFilaPlantilla(this)">↺</button>
       <span class="pl-importe" style="font-size:12px;font-weight:600;color:var(--navy2);white-space:nowrap;"></span>
     </div></td>
     <td style="padding:4px 6px;"><input type="text" class="pl-base" list="datalist-bases-especiales" placeholder="rem. total" value="${f.base_codigo||''}" style="width:80px;padding:6px;border:1.5px solid var(--border);border-radius:6px;"></td>
@@ -4636,6 +4638,29 @@ function filaPlantillaHTML(f){
 
 // Botón manual: fuerza el valor de esa fila al básico del legajo, sin
 // depender de que el nombre del concepto coincida con ningún patrón.
+// Último resultado de "Calcular desde convenio", por código: referencia para ↺
+let _ultimoCalculoPlantilla={};
+
+// ↺ Restaura la fila a su valor correcto: el del último cálculo desde convenio;
+// si no hay, el del diccionario de conceptos (% y base) o el básico del legajo.
+function restaurarFilaPlantilla(btn){
+  const tr=btn.closest('tr');
+  const cod=tr.querySelector('.pl-codigo').value.trim();
+  if(!cod)return;
+  let ref=_ultimoCalculoPlantilla[cod];
+  if(!ref){
+    const dic=_plantillaMapPropio[cod]||conceptosMap[cod];
+    if(dic?.calculo==='pct'&&dic.porcentaje!=null)ref={calculo:'pct',valor:Number(dic.porcentaje),base_codigo:dic.base_codigo||null};
+    else if(esConceptoBasico(cod)&&_plantillaSueldoBasico!=null)ref={calculo:'fijo',valor:_plantillaSueldoBasico,base_codigo:null};
+  }
+  if(!ref){alert(`No tengo un valor de referencia para el código ${cod}. Tocá "Calcular desde convenio" o cargalo a mano.`);return;}
+  tr.querySelector('.pl-calculo').value=ref.calculo;
+  tr.querySelector('.pl-valor').value=ref.valor;
+  tr.querySelector('.pl-base').value=ref.base_codigo||'';
+  tr.style.background='#FFF8E1';setTimeout(()=>{tr.style.background='';},1200);
+  refrescarImportesPlantilla();
+}
+
 function usarBasicoDeLegajo(btn){
   if(_plantillaSueldoBasico==null){
     alert('Este empleado no tiene sueldo básico cargado en su legajo (Datos de Empleados). Cargalo ahí primero.');
@@ -4712,6 +4737,8 @@ function refrescarImportesPlantilla(){
     const cod=tr.querySelector('.pl-codigo').value.trim();
     const esPct=tr.querySelector('.pl-calculo').value==='pct';
     if(!esPct||!cod){span.textContent='';return;}
+    const pctVal=parseFloat(tr.querySelector('.pl-valor').value)||0;
+    if(pctVal>100){span.textContent='⚠️ el % no puede superar 100';span.style.color='var(--danger)';return;}
     const imp=resueltos[cod];
     span.textContent=imp!=null?'= '+mon(imp):'= ?';
     span.style.color=imp!=null?'var(--navy2)':'var(--danger)';
@@ -4760,6 +4787,8 @@ async function abrirPlantillaEmpleado(empleadoId,nombre,periodoDefault){
 }
 
 async function cargarFilasPlantilla(){
+  _ultimoCalculoPlantilla={};
+  _plantillaBasicoCompleto=null;
   const periodo=_leerPeriodoPlantilla();
   const tipo=document.getElementById('plantilla-tipo').value;
   const estado=document.getElementById('plantilla-estado');
@@ -4817,6 +4846,12 @@ function resolverConceptosPlantilla(filas){
           resueltos[f.codigo]=Math.round(_plantillaBaseObraSocial*f.valor/100*100)/100;
           cambio=true;
         }
+      } else if(f.base_codigo==='basico_completo'){
+        const bc=_plantillaBasicoCompleto??_plantillaSueldoBasico;
+        if(bc!=null){
+          resueltos[f.codigo]=Math.round(bc*f.valor/100*100)/100;
+          cambio=true;
+        }
       } else if(f.base_codigo){
         if(resueltos[f.base_codigo]!=null){
           resueltos[f.codigo]=Math.round(resueltos[f.base_codigo]*f.valor/100*100)/100;
@@ -4865,6 +4900,7 @@ function verVistaPreviaPlantilla(){
     const nombre=nombreConcepto(f.codigo);
     const origenTexto=f.calculo!=='pct'?'Fijo'
       :f.base_codigo==='legajo_os'?(_plantillaBaseObraSocial!=null?`${f.valor}% de ${mon(_plantillaBaseObraSocial)} (base OS jornada completa, legajo)`:'⚠️ base "legajo_os" — no hay valor cargado en el legajo')
+      :f.base_codigo==='basico_completo'?`${f.valor}% de ${mon(_plantillaBasicoCompleto??_plantillaSueldoBasico??0)} (básico completo del mes)`
       :f.base_codigo?(resueltos[f.base_codigo]!=null?`${f.valor}% de ${mon(resueltos[f.base_codigo])} (conc. ${f.base_codigo})`:`⚠️ ${f.valor}% de conc. ${f.base_codigo} — no está en la plantilla`)
       :`${f.valor}% de ${mon(bruto)} (bruto fijo)`;
     return `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px;border-bottom:0.5px solid var(--border);">
@@ -4920,7 +4956,7 @@ function descuentoPresentismo(injust,just){
   return 100;
 }
 
-const CODIGOS_MOTOR={basico:'1',presentismo:'7',ais:'8',antiguedad:'4',asigNR:'416',viatico:'415',
+const CODIGOS_MOTOR={basico:'1',presentismo:'7',ais:'8',antiguedad:'3',asigNR:'416',viatico:'415',
   jubilacion:'201',ley19032:'202',obraSocial:'203',solidario:'206',aporteNR:'211'};
 
 async function calcularDesdeConvenio(){
@@ -4957,6 +4993,7 @@ async function calcularDesdeConvenio(){
       avisos.push('sin escala del mes para la categoría: se usó el básico del legajo');
     } else if(esc.periodo.slice(0,7)!==periodo)avisos.push(`escala vigente desde ${_etiquetaMes(esc.periodo)}`);
     if(basicoCompleto==null){alert('No hay básico: falta la escala del mes y el básico del legajo.');return;}
+    _plantillaBasicoCompleto=basicoCompleto;
 
     // Días del mes
     const y=+mp[1],mo=+mp[2];
@@ -4997,7 +5034,10 @@ async function calcularDesdeConvenio(){
     const ais=param[media?'ais_reducida':'ais_completa'];
     if(ais!=null)fijo(CODIGOS_MOTOR.ais,ais*factor);else avisos.push('sin adicional de integración social');
     if(anios>0){
-      if(tramo)fijo(CODIGOS_MOTOR.antiguedad,basicoCompleto*Number(tramo.porcentaje_por_anio)/100*anios);
+      // % del básico: tasa × años. En mes parcial va sobre el básico completo (no se prorratea).
+      if(tramo)calc.push({codigo:CODIGOS_MOTOR.antiguedad,calculo:'pct',
+        valor:Math.round(Number(tramo.porcentaje_por_anio)*anios*10000)/10000,
+        base_codigo:parcial?'basico_completo':CODIGOS_MOTOR.basico});
       else avisos.push(`sin tasa de antigüedad para ${anios} año(s)`);
     }
     const asigNR=esc?.asig_nr!=null?Number(esc.asig_nr)*factor:null;
@@ -5014,7 +5054,9 @@ async function calcularDesdeConvenio(){
     if(asigNR)pct(CODIGOS_MOTOR.aporteNR,2,CODIGOS_MOTOR.asigNR);
 
     // Mezcla: reemplaza los códigos del motor y conserva el resto de la grilla
-    const delMotor=new Set(Object.values(CODIGOS_MOTOR));
+    _ultimoCalculoPlantilla={};
+    calc.forEach(f=>{_ultimoCalculoPlantilla[f.codigo]=f;});
+    const delMotor=new Set([...Object.values(CODIGOS_MOTOR),'4']); // '4': antigüedad en importe de cálculos anteriores
     const otras=leerFilasPlantillaUI().filter(f=>f.codigo&&!delMotor.has(String(f.codigo)));
     document.getElementById('plantilla-filas').innerHTML='';
     ordenarFilasPorTipo([...calc,...otras]).forEach(f=>agregarFilaPlantilla(f));
@@ -5101,6 +5143,8 @@ async function generarReciboDesdePlantilla(){
   const filas=leerFilasPlantillaUI();
   if(!filas.length){alert('La plantilla no tiene conceptos.');return;}
 
+  const pctMal=filas.filter(f=>f.calculo==='pct'&&f.valor>100).map(f=>f.codigo);
+  if(pctMal.length){alert(`No se puede generar: los códigos ${pctMal.join(', ')} están en % con un valor mayor a 100. Revisá si corresponde "Fijo".`);return;}
   const{resueltos,sinResolver}=resolverConceptosPlantilla(filas);
   if(sinResolver.length){alert(`No se puede generar: faltan calcular los códigos ${sinResolver.join(', ')}. Revisalos en la vista previa.`);return;}
   const desconocidos=filas.filter(f=>clasificacionConcepto(f.codigo)==='desconocido').map(f=>f.codigo);
