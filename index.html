@@ -404,6 +404,7 @@ tr:last-child td{border-bottom:none;}
               <select id="sel-sos-convenio" onclick="event.stopPropagation()" style="padding:4px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;"><option value="">— elegí el convenio —</option></select></label>
             <label style="display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:normal;font-weight:400;color:var(--text);cursor:pointer;"><input type="checkbox" id="chk-sos-f931" checked style="width:15px;height:15px;margin:0;"> Datos para el F.931 (nacionalidad, sexo, cónyuge, hijos, horas y códigos)</label>
             <label style="display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:normal;font-weight:400;color:var(--text);cursor:pointer;"><input type="checkbox" id="chk-sos-sueldo" checked style="width:15px;height:15px;margin:0;"> Sueldo básico (el "Valor Sueldo" de SOS)</label>
+            <label style="display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:normal;font-weight:400;color:var(--text);cursor:pointer;"><input type="checkbox" id="chk-sos-baja" checked style="width:15px;height:15px;margin:0;"> Bajas (si tiene fecha de egreso, se da de baja con esa fecha)</label>
           </div>
           <button class="btn btn-primary" id="btn-revisar-legajos-sos" onclick="revisarLegajosSOS()" style="width:auto;padding:10px 24px;">Revisar y completar legajos</button>
         </div>
@@ -840,13 +841,18 @@ tr:last-child td{border-bottom:none;}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div class="field" style="margin-bottom:0;">
           <label>Situación de revista</label>
-          <select id="legajo-situacion" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+          <select id="legajo-situacion" onchange="onCambioSituacionLegajo()" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
             <option value="activo">Activo</option>
             <option value="licencia">Licencia</option>
             <option value="suspendido">Suspendido</option>
             <option value="vacaciones">Vacaciones</option>
             <option value="baja">Baja</option>
           </select>
+        </div>
+        <div class="field" id="legajo-fecha-baja-wrap" style="margin-bottom:0;display:none;">
+          <label>Fecha de baja <span style="font-weight:400;color:var(--danger);font-size:11px;">(obligatoria)</span></label>
+          <input type="date" id="legajo-fecha-baja" min="1900-01-01" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+          <div id="legajo-fecha-baja-hint" style="font-size:12px;color:var(--danger);margin-top:3px;"></div>
         </div>
         <div class="field" style="margin-bottom:0;">
           <label>Número de Legajo <span style="font-weight:400;color:var(--text3);font-size:11px;">(opcional)</span></label>
@@ -913,27 +919,27 @@ tr:last-child td{border-bottom:none;}
         <div class="field" style="margin-bottom:0;">
           <label>Modalidad de contratación (código)</label>
           <input oninput="mostrarDescCodigoF931(this)" type="text" id="legajo-cod-modalidad" list="dl-modalidades" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
-          <div id="legajo-cod-modalidad-desc" style="font-size:11px;color:var(--text3);margin-top:3px;min-height:14px;"></div>
+          <div id="legajo-cod-modalidad-desc" style="font-size:12px;font-weight:600;color:var(--navy2);margin-top:4px;min-height:16px;"></div>
         </div>
         <div class="field" style="margin-bottom:0;">
           <label>Condición (código)</label>
           <input oninput="mostrarDescCodigoF931(this)" type="text" id="legajo-cod-condicion" list="dl-condiciones" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
-          <div id="legajo-cod-condicion-desc" style="font-size:11px;color:var(--text3);margin-top:3px;min-height:14px;"></div>
+          <div id="legajo-cod-condicion-desc" style="font-size:12px;font-weight:600;color:var(--navy2);margin-top:4px;min-height:16px;"></div>
         </div>
         <div class="field" style="margin-bottom:0;">
           <label>Actividad (código)</label>
           <input oninput="mostrarDescCodigoF931(this)" type="text" id="legajo-cod-actividad" list="dl-actividades" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
-          <div id="legajo-cod-actividad-desc" style="font-size:11px;color:var(--text3);margin-top:3px;min-height:14px;"></div>
+          <div id="legajo-cod-actividad-desc" style="font-size:12px;font-weight:600;color:var(--navy2);margin-top:4px;min-height:16px;"></div>
         </div>
         <div class="field" style="margin-bottom:0;">
           <label>Zona (código)</label>
           <input oninput="mostrarDescCodigoF931(this)" type="text" id="legajo-cod-zona" list="dl-zonas" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
-          <div id="legajo-cod-zona-desc" style="font-size:11px;color:var(--text3);margin-top:3px;min-height:14px;"></div>
+          <div id="legajo-cod-zona-desc" style="font-size:12px;font-weight:600;color:var(--navy2);margin-top:4px;min-height:16px;"></div>
         </div>
         <div class="field" style="margin-bottom:0;">
           <label>Siniestrado (código)</label>
           <input oninput="mostrarDescCodigoF931(this)" type="text" id="legajo-cod-siniestrado" list="dl-siniestrados" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
-          <div id="legajo-cod-siniestrado-desc" style="font-size:11px;color:var(--text3);margin-top:3px;min-height:14px;"></div>
+          <div id="legajo-cod-siniestrado-desc" style="font-size:12px;font-weight:600;color:var(--navy2);margin-top:4px;min-height:16px;"></div>
         </div>
       </div>
     </details>
@@ -4221,7 +4227,7 @@ async function abrirLegajoEmpleado(empleadoId,nombre){
   if(!empId){alert('No se pudo determinar la empresa. Volvé a intentarlo.');return;}
   _legajoEmpleadoId=empleadoId;
   document.getElementById('legajo-empleado-title').textContent=`Legajo — ${nombre}`;
-  const campos=['numero','fecha-nacimiento','situacion','basico','base-os','os','banco','cbu','domicilio','nacionalidad','sexo','conyuge','hijos','adherentes','horas-mensuales','cod-modalidad','cod-condicion','cod-actividad','cod-zona','cod-siniestrado'];
+  const campos=['numero','fecha-nacimiento','situacion','fecha-baja','basico','base-os','os','banco','cbu','domicilio','nacionalidad','sexo','conyuge','hijos','adherentes','horas-mensuales','cod-modalidad','cod-condicion','cod-actividad','cod-zona','cod-siniestrado'];
   campos.forEach(c=>{const el=document.getElementById('legajo-'+c);if(el)el.value=c==='situacion'?'activo':'';});
   document.getElementById('legajo-afiliado').checked=false;
   document.getElementById('legajo-fecha-nacimiento').max=new Date().toISOString().slice(0,10);
@@ -4251,6 +4257,7 @@ async function abrirLegajoEmpleado(empleadoId,nombre){
     document.getElementById('legajo-cod-zona').value=legajo.cod_zona||'';
     document.getElementById('legajo-cod-siniestrado').value=legajo.cod_siniestrado||'';
     document.getElementById('legajo-situacion').value=legajo.situacion_revista||'activo';
+    document.getElementById('legajo-fecha-baja').value=legajo.fecha_baja||'';
     document.getElementById('legajo-basico').value=formatearNumeroAR(legajo.sueldo_basico);
     document.getElementById('legajo-base-os').value=formatearNumeroAR(legajo.base_obra_social);
     document.getElementById('legajo-os').value=resolverNombreObraSocial(legajo.obra_social||'');
@@ -4264,7 +4271,15 @@ async function abrirLegajoEmpleado(empleadoId,nombre){
     normalizarObraSocialLegajo();
   }
   refrescarDescCodigosF931();
+  onCambioSituacionLegajo();
   abrirModal('modal-legajo-empleado');
+}
+
+// Muestra la fecha de baja solo cuando la situación de revista es "Baja"
+function onCambioSituacionLegajo(){
+  const esBaja=document.getElementById('legajo-situacion').value==='baja';
+  document.getElementById('legajo-fecha-baja-wrap').style.display=esBaja?'block':'none';
+  document.getElementById('legajo-fecha-baja-hint').textContent='';
 }
 
 // ─── CÓDIGOS F.931 (SICOSS): descripción al lado del código ───
@@ -4321,7 +4336,7 @@ function mostrarDescCodigoF931(input){
   if(!cod){desc.textContent='';return;}
   const txt=CODIGOS_F931[campo]?.[cod];
   desc.textContent=txt||'Código sin descripción en el catálogo';
-  desc.style.color=txt?'var(--text3)':'var(--danger)';
+  desc.style.color=txt?'var(--navy2)':'var(--danger)';
 }
 
 function refrescarDescCodigosF931(){
@@ -4349,6 +4364,15 @@ async function guardarLegajo(){
   }
   if(hintOs)hintOs.textContent='';
 
+  const esBajaLegajo=document.getElementById('legajo-situacion').value==='baja';
+  const fechaBajaLegajo=document.getElementById('legajo-fecha-baja').value||null;
+  if(esBajaLegajo&&!fechaBajaLegajo){
+    document.getElementById('legajo-fecha-baja-hint').textContent='⚠️ Indicá la fecha de baja antes de guardar.';
+    document.getElementById('legajo-fecha-baja').focus();
+    document.getElementById('legajo-fecha-baja').scrollIntoView({behavior:'smooth',block:'center'});
+    return;
+  }
+
   const btn=document.getElementById('btn-guardar-legajo');
   const textoOriginal=btn?btn.textContent:'';
   if(btn){btn.disabled=true;btn.textContent='Guardando...';}
@@ -4367,6 +4391,7 @@ async function guardarLegajo(){
       numero_legajo:document.getElementById('legajo-numero').value.trim()||null,
       fecha_nacimiento:document.getElementById('legajo-fecha-nacimiento').value||null,
       situacion_revista:document.getElementById('legajo-situacion').value,
+      fecha_baja:esBajaLegajo?fechaBajaLegajo:null,
       convenio:convenioVal&&convenioVal!=='__nuevo__'?convenioVal:null,
       categoria:categoriaVal&&categoriaVal!=='__nueva__'?categoriaVal:null,
       sueldo_basico:parsearNumeroAR(document.getElementById('legajo-basico').value),
@@ -5272,10 +5297,11 @@ function parseLegajosSOS(html){
             dom:i('Domicilio'),loc:i('Localidad'),cp:i('CP'),prov:i('Provincia'),osTxt:i('Obra Social'),osCod:i('Cod Obra Social'),
             cat:i('Categoria'),horas:i('Horas Mensuales'),tarea:i('Tarea'),
             nacion:i('Nacionalidad'),sexo:i('Sexo'),cony:i('Conyuge'),hijos:i('Hijos'),adh:i('Adherentes'),
-            cMod:i('Cod Modalidad Contratacion'),cCond:i('Cod Condicion'),cAct:i('Cod Actividad'),cZona:i('Cod Zona'),cSin:i('Cod Siniestrado'),sueldo:i('Valor Sueldo')};
+            cMod:i('Cod Modalidad Contratacion'),cCond:i('Cod Condicion'),cAct:i('Cod Actividad'),cZona:i('Cod Zona'),cSin:i('Cod Siniestrado'),sueldo:i('Valor Sueldo'),
+            egreso:cols.findIndex(c=>/egreso/i.test(c)||/fecha\s*(de\s*)?baja/i.test(c))};
   if(ix.cuit<0||ix.cuil<0||ix.nac<0)return null;
   const g=(f,k)=>ix[k]>=0?(f[ix[k]]||'').trim():'';
-  return filas.slice(hi+1).filter(f=>nc(g(f,'cuil')).length===11).map(f=>{
+  const out=filas.slice(hi+1).filter(f=>nc(g(f,'cuil')).length===11).map(f=>{
     const dom=g(f,'dom'),loc=g(f,'loc'),cp=g(f,'cp'),prov=g(f,'prov');
     return{
       cuitEmpresa:nc(g(f,'cuit')),cuil:nc(g(f,'cuil')),nombre:g(f,'nom'),legajo:g(f,'leg'),
@@ -5288,9 +5314,12 @@ function parseLegajosSOS(html){
       conyuge:{true:true,false:false}[g(f,'cony').toLowerCase()]??null,
       hijos:_enteroOnull(g(f,'hijos')),adherentes:_enteroOnull(g(f,'adh')),horasNum:_enteroOnull(g(f,'horas')),
       codMod:g(f,'cMod'),codCond:g(f,'cCond'),codAct:g(f,'cAct'),codZona:g(f,'cZona'),codSin:g(f,'cSin'),
-      sueldo:parseFloat(g(f,'sueldo'))>0?parseFloat(g(f,'sueldo')):null
+      sueldo:parseFloat(g(f,'sueldo'))>0?parseFloat(g(f,'sueldo')):null,
+      egreso:fechaSOSaISO(g(f,'egreso'))
     };
   });
+  out.tieneEgreso=ix.egreso>=0;
+  return out;
 }
 
 async function poblarConveniosSOS(){
@@ -5336,8 +5365,10 @@ async function revisarLegajosSOS(){
   if(!_legajosSOS?.length){alert('Primero subí el Listado de legajos de SOS Contador.');return;}
   const op={nac:document.getElementById('chk-sos-nac').checked,leg:document.getElementById('chk-sos-leg').checked,
             os:document.getElementById('chk-sos-os').checked,dom:document.getElementById('chk-sos-dom').checked,cat:document.getElementById('chk-sos-cat').checked,
-            f931:document.getElementById('chk-sos-f931').checked,sueldo:document.getElementById('chk-sos-sueldo').checked};
-  if(!op.nac&&!op.leg&&!op.os&&!op.dom&&!op.cat&&!op.f931&&!op.sueldo){alert('Tildá al menos un dato para completar.');return;}
+            f931:document.getElementById('chk-sos-f931').checked,sueldo:document.getElementById('chk-sos-sueldo').checked,
+            baja:document.getElementById('chk-sos-baja').checked};
+  if(op.baja&&!_legajosSOS.tieneEgreso){alert('El archivo no tiene una columna de fecha de egreso, así que no se pueden procesar las bajas. Destildá "Bajas" o exportá el listado con esa columna.');return;}
+  if(!op.nac&&!op.leg&&!op.os&&!op.dom&&!op.cat&&!op.f931&&!op.sueldo&&!op.baja){alert('Tildá al menos un dato para completar.');return;}
   const btn=document.getElementById('btn-revisar-legajos-sos');
   const txtBtn=btn.textContent;btn.disabled=true;btn.textContent='Revisando...';
   try{
@@ -5371,13 +5402,15 @@ async function revisarLegajosSOS(){
     const colsLeg=['empleado_id','numero_legajo','fecha_nacimiento','domicilio','obra_social','convenio','categoria'];
     if(op.f931)colsLeg.push('nacionalidad','sexo','conyuge','hijos','adherentes','cod_modalidad','cod_condicion','cod_actividad','cod_zona','cod_siniestrado','horas_mensuales');
     if(op.sueldo)colsLeg.push('sueldo_basico');
+    if(op.baja)colsLeg.push('situacion_revista','fecha_baja');
     for(const lote of _enLotes(idsEmp,80)){
       const{data,error}=await sb.from('legajo_empleado').select(colsLeg.join(',')).in('empleado_id',lote);
       if(error){alert('No se pudieron leer los legajos: '+error.message);return;}
       data?.forEach(l=>{legajoPorEmp[l.empleado_id]=l;});
     }
 
-    const cuenta={nac:{ok:0,ya:0,sin:0},leg:{ok:0,ya:0,sin:0},os:{ok:0,ya:0,sin:0},dom:{ok:0,ya:0,sin:0},cat:{ok:0,ya:0,sin:0},f931:{ok:0,ya:0,sin:0},sueldo:{ok:0,ya:0,sin:0}};
+    const cuenta={nac:{ok:0,ya:0,sin:0},leg:{ok:0,ya:0,sin:0},os:{ok:0,ya:0,sin:0},dom:{ok:0,ya:0,sin:0},cat:{ok:0,ya:0,sin:0},f931:{ok:0,ya:0,sin:0},sueldo:{ok:0,ya:0,sin:0},baja:{ok:0,ya:0}};
+    const bajasNombres=[];
     const noEncontrados=[],sinCatalogo={},plan=[],sinCategoria=[],avisosJornada=[];
     const nombreEmpresa=empresas.map(e=>e.nombre).join(', ');
     for(const r of _legajosSOS){
@@ -5426,7 +5459,19 @@ async function revisarLegajosSOS(){
         if(!resuelta&&r.codOS&&!leg?.obra_social)sinCatalogo[r.codOS]=r.textoOS;
         evaluar('os',resuelta?nombreOS:'',leg?.obra_social,'obra_social');
       }
-      if(Object.keys(cambios).length)plan.push({empleado:e,empresa:emp,existe:!!leg,cambios});
+      let desactivar=false;
+      if(op.baja&&r.egreso){
+        const yaBaja=!e.activo&&leg?.situacion_revista==='baja'&&leg?.fecha_baja;
+        if(yaBaja)cuenta.baja.ya++;
+        else{
+          cambios.situacion_revista='baja';
+          if(!leg?.fecha_baja)cambios.fecha_baja=r.egreso;
+          desactivar=e.activo;
+          cuenta.baja.ok++;
+          bajasNombres.push(`${r.nombre} (${r.egreso.split('-').reverse().join('/')})`);
+        }
+      }
+      if(Object.keys(cambios).length)plan.push({empleado:e,empresa:emp,existe:!!leg,cambios,desactivar});
     }
     const lineas=[];
     if(op.nac)lineas.push(`• Fecha de nacimiento: ${cuenta.nac.ok} a completar (${cuenta.nac.ya} ya la tenían, ${cuenta.nac.sin} sin dato en el archivo)`);
@@ -5435,11 +5480,12 @@ async function revisarLegajosSOS(){
     if(op.cat)lineas.push(`• Convenio y categoría: ${cuenta.cat.ok} a asignar (${cuenta.cat.ya} ya tenían categoría u otro convenio, ${cuenta.cat.sin} sin categoría equivalente)`);
     if(op.f931)lineas.push(`• Datos F.931: ${cuenta.f931.ok} valores a completar (${cuenta.f931.ya} ya cargados, ${cuenta.f931.sin} vacíos en el archivo)`);
     if(op.sueldo)lineas.push(`• Sueldo básico: ${cuenta.sueldo.ok} a completar (${cuenta.sueldo.ya} ya lo tenían, ${cuenta.sueldo.sin} sin dato)`);
+    if(op.baja)lineas.push(`• Bajas por fecha de egreso: ${cuenta.baja.ok} a dar de baja (${cuenta.baja.ya} ya estaban dados de baja)${bajasNombres.length?`:\n   ${bajasNombres.slice(0,15).join('\n   ')}${bajasNombres.length>15?`\n   y ${bajasNombres.length-15} más`:''}`:''}`);
     if(op.dom)lineas.push(`• Domicilio: ${cuenta.dom.ok} a completar (${cuenta.dom.ya} ya lo tenían, ${cuenta.dom.sin} sin dato en el archivo)`);
     const codigos=Object.keys(sinCatalogo);
     const msg=`Archivo de ${nombreEmpresa}: ${_legajosSOS.length} legajos. Encontrados en Jump Salary: ${_legajosSOS.length-noEncontrados.length}.`
       +(noEncontrados.length?`\n\nNo encontrados (no se tocan): ${noEncontrados.slice(0,8).join(', ')}${noEncontrados.length>8?` y ${noEncontrados.length-8} más`:''}.`:'')
-      +`\n\nSe completan solo campos vacíos:\n${lineas.join('\n')}`
+      +`\n\nSe completan solo campos vacíos${op.baja?' (las bajas cambian la situación de revista; la fecha de baja solo si estaba vacía)':''}:\n${lineas.join('\n')}`
       +(sinCategoria.length?`\n\nSin categoría equivalente (no se tocan): ${sinCategoria.slice(0,6).join('; ')}${sinCategoria.length>6?` y ${sinCategoria.length-6} más`:''}.`:'')
       +(avisosJornada.length?`\n\nRevisar en SOS Contador (la Tarea no coincide con las horas): ${avisosJornada.join(', ')}.`:'')
       +(codigos.length?`\n\nCódigos de obra social que no están en tu catálogo (cargalos en Convenios → Obras Sociales con nombre y código y repetí este paso): ${codigos.join(', ')}.`:'')
@@ -5454,7 +5500,12 @@ async function revisarLegajosSOS(){
         const{error}=it.existe
           ?await sb.from('legajo_empleado').update(it.cambios).eq('empleado_id',it.empleado.id)
           :await sb.from('legajo_empleado').insert({empresa_id:it.empresa.id,empleado_id:it.empleado.id,situacion_revista:it.empleado.activo?'activo':'baja',...it.cambios});
-        if(error)errores.push(`${it.empleado.nombre}: ${error.message}`);else hechos++;
+        if(error){errores.push(`${it.empleado.nombre}: ${error.message}`);return;}
+        if(it.desactivar){
+          const{error:errAct}=await sb.from('empleados').update({activo:false}).eq('id',it.empleado.id);
+          if(errAct){errores.push(`${it.empleado.nombre} (baja): ${errAct.message}`);return;}
+        }
+        hechos++;
       }));
     }
     if(errores.length)alert(`Se completaron ${hechos} legajo(s), pero ${errores.length} dieron error.\n\nPrimero: ${errores[0]}\n\n(Si dice que falta una columna, creala en Supabase — por ejemplo fecha_nacimiento en legajo_empleado.)`);
