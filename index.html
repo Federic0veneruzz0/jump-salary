@@ -461,7 +461,11 @@ tr:last-child td{border-bottom:none;}
             <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
               <div class="field" style="margin-bottom:0;">
                 <label>Período a preparar</label>
-                <input type="month" id="preparacion-periodo" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;">
+                <div style="display:flex;gap:6px;">
+                  <select id="preparacion-periodo-mes" onchange="syncPeriodo('preparacion-periodo')" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;"></select>
+                  <select id="preparacion-periodo-anio" onchange="syncPeriodo('preparacion-periodo')" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;"></select>
+                  <input type="hidden" id="preparacion-periodo">
+                </div>
               </div>
               <button class="btn-sm btn-gold" style="align-self:flex-end;" onclick="cargarRecibosPreparacion()">Cargar</button>
             </div>
@@ -740,7 +744,11 @@ tr:last-child td{border-bottom:none;}
       </div>
       <div class="field" style="flex:1;min-width:140px;margin-bottom:0;">
         <label>Período</label>
-        <input type="month" id="plantilla-periodo" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;" onchange="cargarFilasPlantilla()">
+        <div style="display:flex;gap:6px;">
+          <select id="plantilla-periodo-mes" onchange="syncPeriodo('plantilla-periodo');cargarFilasPlantilla()" style="flex:1;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;"></select>
+          <select id="plantilla-periodo-anio" onchange="syncPeriodo('plantilla-periodo');cargarFilasPlantilla()" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;"></select>
+          <input type="hidden" id="plantilla-periodo">
+        </div>
       </div>
       <div style="align-self:flex-end;display:flex;gap:8px;">
         <button class="btn-sm btn-outline" onclick="clonarPeriodoAnterior()">↩️ Clonar período anterior</button>
@@ -4460,8 +4468,7 @@ function mostrarVistaRecibos(vista){
   const preparacion=document.getElementById('recibos-preparacion-container');
   const btnEmitidos=document.getElementById('btn-vista-emitidos');
   const btnPreparacion=document.getElementById('btn-vista-preparacion');
-  const elPrepMes=document.getElementById('preparacion-periodo');
-  if(elPrepMes&&!elPrepMes.value)elPrepMes.value=_mesActualISO();
+  if(!document.getElementById('preparacion-periodo')?.value)setPeriodo('preparacion-periodo',_mesActualISO());
   if(vista==='preparacion'){
     emitidos.style.display='none';
     preparacion.style.display='block';
@@ -4479,7 +4486,6 @@ async function cargarRecibosPreparacion(){
   if(!empresaActivaId){alert('Seleccioná una empresa en el panel superior primero.');return;}
   const elPrep=document.getElementById('preparacion-periodo');
   const periodo=normPeriodo(elPrep.value);
-  if(periodo&&elPrep.value.trim()!==periodo)elPrep.value=periodo;
   const cont=document.getElementById('tabla-preparacion');
   if(!periodo){alert('Indicá el período a preparar (ej. 2026-08).');return;}
   cont.innerHTML='<div class="loading">Cargando...</div>';
@@ -4543,17 +4549,41 @@ function _mesActualISO(){
   const h=new Date();
   return `${h.getFullYear()}-${String(h.getMonth()+1).padStart(2,'0')}`;
 }
-// El selector de "En preparación" arranca en el mes actual
+// Selector de período: desplegable de mes + desplegable de año. El valor
+// (AAAA-MM) queda en un input oculto con el id original.
+const MESES_ES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+function _poblarSelectPeriodo(id,anioExtra){
+  const selM=document.getElementById(id+'-mes'),selA=document.getElementById(id+'-anio');
+  if(!selM||!selA)return;
+  if(!selM.options.length)selM.innerHTML=MESES_ES.map((n,i)=>`<option value="${String(i+1).padStart(2,'0')}">${n}</option>`).join('');
+  const actual=new Date().getFullYear();
+  const anios=new Set([...Array.from(selA.options).map(o=>+o.value)]);
+  for(let a=2024;a<=actual+1;a++)anios.add(a);
+  if(anioExtra)anios.add(+anioExtra);
+  const previo=selA.value;
+  selA.innerHTML=[...anios].sort((a,b)=>a-b).map(a=>`<option value="${a}">${a}</option>`).join('');
+  if(previo)selA.value=previo;
+}
+function setPeriodo(id,iso){
+  const m=/^(\d{4})-(\d{2})$/.exec(normPeriodo(iso)||'');
+  const v=m?`${m[1]}-${m[2]}`:_mesActualISO();
+  const[y,mo]=v.split('-');
+  _poblarSelectPeriodo(id,y);
+  document.getElementById(id+'-mes').value=mo;
+  document.getElementById(id+'-anio').value=y;
+  document.getElementById(id).value=v;
+}
+function syncPeriodo(id){
+  const mo=document.getElementById(id+'-mes').value,y=document.getElementById(id+'-anio').value;
+  document.getElementById(id).value=mo&&y?`${y}-${mo}`:'';
+}
 document.addEventListener('DOMContentLoaded',()=>{
-  const el=document.getElementById('preparacion-periodo');
-  if(el&&!el.value)el.value=_mesActualISO();
+  setPeriodo('preparacion-periodo',_mesActualISO());
+  setPeriodo('plantilla-periodo',_mesActualISO());
 });
 
 function _leerPeriodoPlantilla(){
-  const el=document.getElementById('plantilla-periodo');
-  const iso=normPeriodo(el.value);
-  if(iso&&el.value.trim()!==iso)el.value=iso;
-  return iso;
+  return normPeriodo(document.getElementById('plantilla-periodo').value);
 }
 
 // ─── PLANTILLA DE LIQUIDACIÓN POR EMPLEADO ───
@@ -4593,9 +4623,10 @@ function filaPlantillaHTML(f){
     <td style="padding:4px 6px;"><div style="display:flex;gap:4px;align-items:center;">
       <input type="number" step="0.01" class="pl-valor" value="${f.valor??''}" style="width:100px;padding:6px;border:1.5px solid var(--border);border-radius:6px;">
       <button type="button" class="btn-sm btn-outline" title="Usar el sueldo básico cargado en el legajo" style="padding:4px 6px;" onclick="usarBasicoDeLegajo(this)">📋</button>
+      <span class="pl-importe" style="font-size:12px;font-weight:600;color:var(--navy2);white-space:nowrap;"></span>
     </div></td>
     <td style="padding:4px 6px;"><input type="text" class="pl-base" list="datalist-bases-especiales" placeholder="rem. total" value="${f.base_codigo||''}" style="width:80px;padding:6px;border:1.5px solid var(--border);border-radius:6px;"></td>
-    <td style="padding:4px 6px;"><button class="btn-sm btn-outline" onclick="this.closest('tr').remove()">✕</button></td>
+    <td style="padding:4px 6px;"><button class="btn-sm btn-outline" onclick="this.closest('tr').remove();refrescarImportesPlantilla()">✕</button></td>
   </tr>`;
 }
 
@@ -4666,8 +4697,30 @@ function poblarDatalistConceptos(){
 }
 
 
+// Muestra al lado de cada concepto en % el importe que resulta
+function refrescarImportesPlantilla(){
+  const trs=[...document.querySelectorAll('#plantilla-filas tr')];
+  const filas=leerFilasPlantillaUI();
+  const{resueltos}=resolverConceptosPlantilla(filas);
+  trs.forEach(tr=>{
+    const span=tr.querySelector('.pl-importe');
+    if(!span)return;
+    const cod=tr.querySelector('.pl-codigo').value.trim();
+    const esPct=tr.querySelector('.pl-calculo').value==='pct';
+    if(!esPct||!cod){span.textContent='';return;}
+    const imp=resueltos[cod];
+    span.textContent=imp!=null?'= '+mon(imp):'= ?';
+    span.style.color=imp!=null?'var(--navy2)':'var(--danger)';
+  });
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  const tb=document.getElementById('plantilla-filas');
+  if(tb){tb.addEventListener('input',refrescarImportesPlantilla);tb.addEventListener('change',refrescarImportesPlantilla);}
+});
+
 function agregarFilaPlantilla(datos){
   document.getElementById('plantilla-filas').insertAdjacentHTML('beforeend',filaPlantillaHTML(datos));
+  refrescarImportesPlantilla();
 }
 
 function leerFilasPlantillaUI(){
@@ -4684,7 +4737,7 @@ async function abrirPlantillaEmpleado(empleadoId,nombre,periodoDefault){
   _plantillaEmpleadoId=empleadoId;
   _plantillaEmpleadoNombre=nombre;
   document.getElementById('plantilla-empleado-title').textContent=`Plantilla de liquidación — ${nombre}`;
-  document.getElementById('plantilla-periodo').value=normPeriodo(periodoDefault)||_mesActualISO();
+  setPeriodo('plantilla-periodo',periodoDefault||_mesActualISO());
   document.getElementById('plantilla-tipo').value='sueldo';
   document.getElementById('plantilla-filas').innerHTML='';
   document.getElementById('plantilla-estado').textContent='Indicá período y tipo para cargar o crear la plantilla.';
